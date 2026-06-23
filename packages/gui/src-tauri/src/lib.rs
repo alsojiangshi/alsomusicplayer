@@ -102,7 +102,7 @@ async fn http_fetch(url: String, options: Option<FetchOptions>) -> Result<FetchR
     let resp_headers: HashMap<String, String> = resp
         .headers()
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string_lossy().to_string()))
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or_default().to_string()))
         .collect();
 
     let body = resp
