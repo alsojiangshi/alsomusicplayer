@@ -8,7 +8,7 @@ const DEFAULT_CONFIG: AppConfig = {
   lyrics: { autoSearch: true, providers: ['lrclib', 'netease'], localPreferred: true },
   s3: { endpoint: '', accessKey: '', secretKey: '', bucket: '', prefix: '', region: 'us-east-1', useSsl: true },
   openlist: { serverUrl: '', username: '', password: '' },
-  library: { musicDirs: [] },
+  library: { musicDirs: [], dbPath: '' },
   search: {
     enabledSources: ['netease'],
     defaultSource: 'netease',
@@ -18,7 +18,7 @@ const DEFAULT_CONFIG: AppConfig = {
         searchUrl: 'https://music.163.com/api/search/get?type=1&limit=20&offset=0',
         searchHeaders: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' },
         resultPath: 'result.songs',
-        mapping: { id: 'id', name: 'name', artist: 'ar[0].name', album: 'al.name', duration: 'dt' },
+        mapping: { id: 'id', name: 'name', artist: 'artists[0].name', album: 'al.name', duration: 'dt' },
         playbackUrlTemplate: 'https://music.163.com/song/media/outer/url?id={id}.mp3',
       },
     },

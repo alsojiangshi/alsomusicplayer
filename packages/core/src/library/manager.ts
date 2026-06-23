@@ -6,6 +6,28 @@ import type { Track } from '../types.js';
 export class LibraryManager {
   constructor(private db: Database) {}
 
+  /** snake_case (DB) → camelCase (Track) 映射 */
+  private mapTrackRow(row: Record<string, any>): Track {
+    return {
+      id: row.id,
+      title: row.title,
+      artist: row.artist,
+      album: row.album,
+      duration: row.duration,
+      filePath: row.file_path,
+      fileHash: row.file_hash,
+      format: row.format,
+      bitrate: row.bitrate,
+      sampleRate: row.sample_rate,
+      channels: row.channels,
+      fileSize: row.file_size,
+      coverArt: row.cover_art,
+      source: row.source,
+      sourceConfig: row.source_config,
+      dateAdded: row.date_added,
+    };
+  }
+
   addSong(track: Partial<Track> & { filePath: string }): number | null {
     const existing = this.db.queryOne<{ id: number }>(
       'SELECT id FROM songs WHERE file_path = ?', [track.filePath]
@@ -36,11 +58,12 @@ export class LibraryManager {
   }
 
   getSong(id: number): Track | null {
-    return this.db.queryOne<Track>('SELECT * FROM songs WHERE id = ?', [id]);
+    const row = this.db.queryOne<Record<string, any>>('SELECT * FROM songs WHERE id = ?', [id]);
+    return row ? this.mapTrackRow(row) : null;
   }
 
   getAllSongs(): Track[] {
-    return this.db.query<Track>('SELECT * FROM songs ORDER BY date_added DESC');
+    return this.db.query<Record<string, any>>('SELECT * FROM songs ORDER BY date_added DESC').map(r => this.mapTrackRow(r));
   }
 
   search(query?: string, source?: string, limit = 1000): Track[] {
@@ -50,7 +73,7 @@ export class LibraryManager {
     if (source && source !== 'all') { sql += ' AND source = ?'; params.push(source); }
     sql += ' ORDER BY date_added DESC LIMIT ?';
     params.push(limit);
-    return this.db.query<Track>(sql, params);
+    return this.db.query<Record<string, any>>(sql, params).map(r => this.mapTrackRow(r));
   }
 
   deleteSong(id: number): void {
@@ -81,10 +104,10 @@ export class LibraryManager {
   }
 
   getPlaylistSongs(playlistId: number): Track[] {
-    return this.db.query<Track>(
+    return this.db.query<Record<string, any>>(
       `SELECT s.* FROM songs s JOIN playlist_items pi ON s.id = pi.song_id
        WHERE pi.playlist_id = ? ORDER BY pi.position ASC`, [playlistId]
-    );
+    ).map(r => this.mapTrackRow(r));
   }
 
   addSongsToPlaylist(playlistId: number, songIds: number[]): number {
@@ -128,9 +151,9 @@ export class LibraryManager {
   }
 
   getFavorites(): Track[] {
-    return this.db.query<Track>(
+    return this.db.query<Record<string, any>>(
       'SELECT s.* FROM songs s JOIN favorites f ON s.id = f.song_id ORDER BY f.added_at DESC'
-    );
+    ).map(r => this.mapTrackRow(r));
   }
 
   // History
@@ -139,10 +162,10 @@ export class LibraryManager {
   }
 
   getHistory(limit = 50): Track[] {
-    return this.db.query<Track>(
+    return this.db.query<Record<string, any>>(
       `SELECT DISTINCT s.* FROM songs s JOIN play_history h ON s.id = h.song_id
        ORDER BY h.played_at DESC LIMIT ?`, [limit]
-    );
+    ).map(r => this.mapTrackRow(r));
   }
 
   // Lyrics cache

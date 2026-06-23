@@ -67,6 +67,27 @@ fn get_data_dir() -> Result<String, String> {
     Ok(format!("{}/music-player", base))
 }
 
+// ─── 文件导入 ───────────────────────────────────────────
+
+#[tauri::command]
+fn copy_file_to_library(src: String, filename: String) -> Result<String, String> {
+    let base = if cfg!(target_os = "windows") {
+        std::env::var("APPDATA").unwrap_or_else(|_| {
+            std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string())
+        })
+    } else {
+        std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+            format!("{}/.local/share", home)
+        })
+    };
+    let lib_dir = format!("{}/music-player/library", base);
+    std::fs::create_dir_all(&lib_dir).map_err(|e| format!("mkdir library: {}", e))?;
+    let dest = format!("{}/{}", lib_dir, filename);
+    std::fs::copy(&src, &dest).map_err(|e| format!("copy file: {}", e))?;
+    Ok(dest)
+}
+
 // ─── HTTP 代理（绕过浏览器 CORS）────────────────────────
 
 #[tauri::command]
@@ -131,6 +152,7 @@ pub fn run() {
             read_text_file,
             write_text_file,
             get_data_dir,
+            copy_file_to_library,
             http_fetch,
         ])
         .run(tauri::generate_context!())

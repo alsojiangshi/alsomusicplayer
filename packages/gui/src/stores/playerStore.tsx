@@ -43,8 +43,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const queueRef = useRef<Track[]>([]);
   const indexRef = useRef(-1);
   const modeRef = useRef<PlaybackMode>(PlaybackMode.Sequential);
+  // refs 用于回调内部（避免闭包陈旧），state 用于 context（触发重渲染）
   const libraryRef = useRef<LibraryManager | null>(null);
   const dbRef = useRef<Database | null>(null);
+  const [libraryManager, setLibraryManager] = useState<LibraryManager | null>(null);
 
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [state, setState] = useState<PlaybackState>(PlaybackState.Stopped);
@@ -59,6 +61,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const initLibrary = useCallback((library: LibraryManager, db: Database) => {
     libraryRef.current = library;
     dbRef.current = db;
+    setLibraryManager(library); // 触发重渲染 → context 更新
   }, []);
 
   const audio = audioRef.current;
@@ -228,7 +231,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={{
       currentTrack, state, volume, mode, duration, position,
       queue: queueRef.current, allTracks, playlists,
-      libraryManager: libraryRef.current,
+      libraryManager,
       togglePlay, next, prev, seek,
       setVolume: (v) => { setVol(v); audio.volume = v / 100; },
       toggleMute: () => { audio.muted = !audio.muted; },

@@ -8,7 +8,7 @@ import LyricsPage from './pages/LyricsPage';
 import SettingsPage from './pages/SettingsPage';
 import { TauriStorageProvider } from './stores/tauriStorage';
 import { proxyFetch } from './utils/proxyFetch';
-import { loadConfig, setHttpClient } from '@core';
+import { loadConfig, getConfig, setHttpClient } from '@core';
 import { Database } from '@core';
 import { LibraryManager } from '@core';
 
@@ -33,8 +33,10 @@ function AppInner() {
         const configPath = `${dataDir}/config.json`;
         await loadConfig(configPath, storage);
 
-        // 3. 初始化数据库
-        const db = new Database(`${dataDir}/music.db`, storage);
+        // 3. 初始化数据库（优先使用用户配置的库路径）
+        const cfg = getConfig();
+        const dbPath = cfg.library?.dbPath || `${dataDir}/music.db`;
+        const db = new Database(dbPath, storage);
         await db.init();
 
         // 4. 创建音乐库管理器

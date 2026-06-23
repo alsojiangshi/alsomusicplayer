@@ -77,6 +77,8 @@ export interface AppConfig {
   openlist: OpenListConfig;
   library: {
     musicDirs: string[];
+    /** 自定义数据库路径，为空则使用默认 dataDir */
+    dbPath: string;
   };
   search: {
     enabledSources: string[];

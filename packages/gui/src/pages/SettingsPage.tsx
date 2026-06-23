@@ -163,6 +163,25 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* 音乐库 */}
+        <section className="bg-bg-darkest border border-border rounded-xl p-5">
+          <h2 className="font-bold mb-3">📚 音乐库</h2>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-text-secondary w-20">数据库</span>
+              <input
+                value={cfg.library.dbPath}
+                onChange={e => update('library', 'dbPath', e.target.value)}
+                placeholder="留空使用默认位置"
+                className="flex-1 bg-bg-medium border border-border rounded px-2 py-1.5 text-text-primary placeholder:text-text-muted"
+              />
+            </div>
+            <p className="text-xs text-text-muted">
+              数据库文件 (music.db) 存放位置。留空则使用系统默认数据目录。修改后重启生效。
+            </p>
+          </div>
+        </section>
+
         {/* 歌词 */}
         <section className="bg-bg-darkest border border-border rounded-xl p-5">
           <h2 className="font-bold mb-3">🎤 歌词</h2>
