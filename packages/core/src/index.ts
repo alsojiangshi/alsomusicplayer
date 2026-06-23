@@ -1,6 +1,7 @@
 /** @music-player/core — barrel export */
 
 export { Database } from './database/db.js';
+export type { StorageProvider } from './database/storage.js';
 export { loadConfig, saveConfig, getConfig, getConfigValue, setConfig, getDataDir } from './config.js';
 export { LibraryManager } from './library/manager.js';
 export { PlaylistEngine } from './playlist/engine.js';
@@ -16,4 +17,6 @@ export { PlaybackState, PlaybackMode } from './types.js';
 export type { Track, Playlist, LyricsData, S3Config, OpenListConfig, AppConfig } from './types.js';
 export { formatDuration, formatFileSize, safeFilename } from './utils/format.js';
 export { computeFileHash } from './utils/hash.js';
+export { computeHashFromBlob } from './utils/hash-browser.js';
 export { extractMetadata, isSupportedAudio, scanDirectory } from './utils/metadata.js';
+export { setHttpClient, getHttpClient } from './utils/http.js';

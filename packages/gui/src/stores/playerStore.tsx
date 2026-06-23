@@ -1,6 +1,7 @@
 import { createContext, useContext, useRef, useState, useCallback, type ReactNode } from 'react';
-import type { Track } from '@core';
+import type { Track, Playlist } from '@core';
 import { PlaybackMode, PlaybackState } from '@core';
+import type { LibraryManager, Database } from '@core';
 
 interface PlayerCtx {
   currentTrack: Track | null;
@@ -11,6 +12,8 @@ interface PlayerCtx {
   position: number;
   queue: Track[];
   allTracks: Track[];
+  libraryManager: LibraryManager | null;
+  playlists: Playlist[];
   togglePlay: () => void;
   next: () => void;
   prev: () => void;
@@ -21,6 +24,15 @@ interface PlayerCtx {
   setQueue: (tracks: Track[], startIdx?: number) => void;
   playIndex: (idx: number) => void;
   addTracks: (tracks: Track[]) => void;
+  deleteTrack: (id: number) => void;
+  initLibrary: (library: LibraryManager, db: Database) => void;
+  // 播放列表
+  loadPlaylists: () => void;
+  createPlaylist: (name: string) => number;
+  deletePlaylist: (id: number) => void;
+  renamePlaylist: (id: number, name: string) => void;
+  addToPlaylist: (playlistId: number, songIds: number[]) => void;
+  removeFromPlaylist: (playlistId: number, songIds: number[]) => void;
 }
 
 const Ctx = createContext<PlayerCtx>(null!);
@@ -30,6 +42,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const queueRef = useRef<Track[]>([]);
   const indexRef = useRef(-1);
   const modeRef = useRef<PlaybackMode>(PlaybackMode.Sequential);
+  const libraryRef = useRef<LibraryManager | null>(null);
+  const dbRef = useRef<Database | null>(null);
 
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [state, setState] = useState<PlaybackState>(PlaybackState.Stopped);
@@ -38,6 +52,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+
+  const initLibrary = useCallback((library: LibraryManager, db: Database) => {
+    libraryRef.current = library;
+    dbRef.current = db;
+  }, []);
 
   const audio = audioRef.current;
   audio.volume = volume / 100;
@@ -103,12 +123,102 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setAllTracks(prev => {
       const existing = new Set(prev.map(t => t.filePath));
       const fresh = tracks.filter(t => !existing.has(t.filePath));
+      // 持久化到数据库
+      const lib = libraryRef.current;
+      const db = dbRef.current;
+      if (lib && db) {
+        for (const track of fresh) {
+          const id = lib.addSong(track);
+          if (id !== null) track.id = id; // 更新为 DB 分配的 ID（跳过重复）
+        db.save().catch(() => {});
+      }
       return [...prev, ...fresh];
     });
   }, []);
 
+  const deleteTrack = useCallback((id: number) => {
+    const lib = libraryRef.current;
+    const db = dbRef.current;
+    if (lib && db) {
+      lib.deleteSong(id);
+      db.save().catch(() => {});
+    }
+    setAllTracks(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // ── 播放列表操作 ──────────────────────────────────────
+
+  const loadPlaylists = useCallback(() => {
+    const lib = libraryRef.current;
+    if (!lib) return;
+    const lists = lib.getAllPlaylists();
+    setPlaylists(lists.map(l => ({
+      id: l.id,
+      name: l.name,
+      songCount: l.songCount,
+      createdAt: l.created_at,
+    })));
+  }, []);
+
+  const createPlaylist = useCallback((name: string) => {
+    const lib = libraryRef.current;
+    const db = dbRef.current;
+    if (!lib || !db) return 0;
+    const id = lib.createPlaylist(name);
+    db.save().catch(() => {});
+    loadPlaylists();
+    return id;
+  }, [loadPlaylists]);
+
+  const deletePlaylist = useCallback((id: number) => {
+    const lib = libraryRef.current;
+    const db = dbRef.current;
+    if (!lib || !db) return;
+    lib.deletePlaylist(id);
+    db.save().catch(() => {});
+    loadPlaylists();
+  }, [loadPlaylists]);
+
+  const renamePlaylist = useCallback((id: number, name: string) => {
+    const lib = libraryRef.current;
+    const db = dbRef.current;
+    if (!lib || !db) return;
+    lib.renamePlaylist(id, name);
+    db.save().catch(() => {});
+    loadPlaylists();
+  }, [loadPlaylists]);
+
+  const addToPlaylist = useCallback((playlistId: number, songIds: number[]) => {
+    const lib = libraryRef.current;
+    const db = dbRef.current;
+    if (!lib || !db) return;
+    lib.addSongsToPlaylist(playlistId, songIds);
+    db.save().catch(() => {});
+    loadPlaylists();
+  }, [loadPlaylists]);
+
+  const removeFromPlaylist = useCallback((playlistId: number, songIds: number[]) => {
+    const lib = libraryRef.current;
+    const db = dbRef.current;
+    if (!lib || !db) return;
+    lib.removeSongsFromPlaylist(playlistId, songIds);
+    db.save().catch(() => {});
+    loadPlaylists();
+  }, [loadPlaylists]);
+
   return (
-    <Ctx.Provider value={{ currentTrack, state, volume, mode, duration, position, queue: queueRef.current, allTracks, togglePlay, next, prev, seek, setVolume: (v) => { setVol(v); audio.volume = v / 100; }, toggleMute: () => { audio.muted = !audio.muted; }, cycleMode, setQueue, playIndex, addTracks }}>
+    <Ctx.Provider value={{
+      currentTrack, state, volume, mode, duration, position,
+      queue: queueRef.current, allTracks, playlists,
+      libraryManager: libraryRef.current,
+      togglePlay, next, prev, seek,
+      setVolume: (v) => { setVol(v); audio.volume = v / 100; },
+      toggleMute: () => { audio.muted = !audio.muted; },
+      cycleMode, setQueue, playIndex,
+      addTracks, deleteTrack, initLibrary,
+      loadPlaylists, createPlaylist, deletePlaylist, renamePlaylist,
+      addToPlaylist, removeFromPlaylist,
+    }}>
       {children}
     </Ctx.Provider>
   );

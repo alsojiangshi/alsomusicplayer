@@ -107,6 +107,19 @@ export class LibraryManager {
     return count;
   }
 
+  removeSongsFromPlaylist(playlistId: number, songIds: number[]): void {
+    for (const songId of songIds) {
+      this.db.run(
+        'DELETE FROM playlist_items WHERE playlist_id = ? AND song_id = ?',
+        [playlistId, songId]
+      );
+    }
+  }
+
+  renamePlaylist(playlistId: number, name: string): void {
+    this.db.run('UPDATE playlists SET name = ? WHERE id = ?', [name, playlistId]);
+  }
+
   // Favorites
   toggleFavorite(songId: number): boolean {
     const exists = this.db.queryOne('SELECT * FROM favorites WHERE song_id = ?', [songId]);

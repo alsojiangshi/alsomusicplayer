@@ -4,20 +4,18 @@ import type { LibraryManager } from '../library/manager.js';
 import type { LyricsData } from '../types.js';
 import { getConfigValue } from '../config.js';
 import type { LyricsProvider } from './providers/base.js';
-import { LocalLyricsProvider } from './providers/local.js';
-import { LRCLibProvider } from './providers/lrclib.js';
-import { NeteaseProvider } from './providers/netease.js';
 import { LRCParser } from './parser.js';
 
 export class LyricsManager {
   readonly parser = LRCParser;
-  private providers: Record<string, LyricsProvider> = {
-    lrclib: new LRCLibProvider(),
-    netease: new NeteaseProvider(),
-    local: new LocalLyricsProvider(),
-  };
+  private providers: Record<string, LyricsProvider> = {};
 
   constructor(private library: LibraryManager) {}
+
+  /** 注册歌词提供者（CLI/GUI 分别在初始化时调用） */
+  registerProvider(name: string, provider: LyricsProvider): void {
+    this.providers[name] = provider;
+  }
 
   getCached(songId: number): LyricsData | null {
     const row = this.library.getCachedLyrics(songId);
@@ -45,14 +43,17 @@ export class LyricsManager {
 
   importLocalContent(songId: number, content: string): boolean {
     if (!content.trim()) return false;
-    const provider = this.providers.local as LocalLyricsProvider;
-    const data = provider.importContent(content);
+    const provider = this.providers.local;
+    if (!provider || !('importContent' in provider)) return false;
+    const data = (provider as any).importContent(content);
     if (!data) return false;
     this.library.cacheLyrics(songId, data);
     return true;
   }
 
   findLocalFile(audioFilePath: string): string | null {
-    return (this.providers.local as LocalLyricsProvider).findLocalLrc(audioFilePath);
+    const provider = this.providers.local;
+    if (!provider || !('findLocalLrc' in provider)) return null;
+    return (provider as any).findLocalLrc(audioFilePath);
   }
 }

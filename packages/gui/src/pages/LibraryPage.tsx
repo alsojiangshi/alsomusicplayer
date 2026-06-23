@@ -30,9 +30,9 @@ export default function LibraryPage() {
       )
     : allTracks;
 
-  const handlePlay = (track: Track) => {
-    setQueue(filtered, filtered.indexOf(track));
-    playIndex(filtered.indexOf(track));
+  const handlePlay = (_track: Track, idx: number) => {
+    setQueue(filtered, idx);
+    playIndex(idx);
   };
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragOver(true); };
@@ -101,7 +101,7 @@ export default function LibraryPage() {
           <p className="text-sm">拖拽音频文件到此处 或 点击左侧「＋ 导入音乐」</p>
         </div>
       ) : (
-        <SongTable tracks={filtered} onDoubleClick={handlePlay} />
+        <SongTable tracks={filtered} onPlay={handlePlay} />
       )}
     </div>
   );

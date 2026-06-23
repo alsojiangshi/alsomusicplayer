@@ -3,6 +3,7 @@
 import type { LyricsData } from '../../types.js';
 import type { LyricsProvider } from './base.js';
 import { LRCParser } from '../parser.js';
+import { getHttpClient } from '../../utils/http.js';
 
 export class NeteaseProvider implements LyricsProvider {
   readonly name = 'netease';
@@ -18,6 +19,7 @@ export class NeteaseProvider implements LyricsProvider {
   }
 
   private async searchSong(title: string, artist: string): Promise<number | null> {
+    const fetch = getHttpClient();
     const resp = await fetch(
       `https://music.163.com/api/search/get?s=${encodeURIComponent(`${title} ${artist}`)}&type=1&limit=10&offset=0`,
       { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' } }
@@ -39,6 +41,7 @@ export class NeteaseProvider implements LyricsProvider {
   }
 
   private async getLyrics(songId: number): Promise<LyricsData | null> {
+    const fetch = getHttpClient();
     const resp = await fetch(
       `https://music.163.com/api/song/lyric?id=${songId}&lv=1&kv=1&tv=1`,
       { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' } }

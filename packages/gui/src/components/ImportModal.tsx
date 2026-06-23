@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import type { Track } from '@core';
+import { proxyFetch } from '../utils/proxyFetch';
 
 type Tab = 'local' | 'url' | 'search';
 
@@ -155,7 +156,7 @@ function SearchTab({ onClose, onImported }: { onClose: () => void; onImported: (
     if (!query.trim()) return;
     setSearching(true); setMsg('搜索中...');
     try {
-      const resp = await fetch(`https://music.163.com/api/search/get?s=${encodeURIComponent(query)}&type=1&limit=20&offset=0`, {
+      const resp = await proxyFetch(`https://music.163.com/api/search/get?s=${encodeURIComponent(query)}&type=1&limit=20&offset=0`, {
         headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' },
       });
       const data = await resp.json();

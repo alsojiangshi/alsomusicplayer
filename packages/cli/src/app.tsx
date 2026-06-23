@@ -5,6 +5,9 @@ import { Box, Text, useInput } from 'ink';
 import { LibraryManager, PlaylistEngine, LyricsManager, Database, loadConfig, getDataDir, PlaybackMode } from '../../core/src/index.js';
 import type { Track } from '../../core/src/index.js';
 import type { AudioBackend } from '../../core/src/index.js';
+import { LRCLibProvider } from '../../core/src/lyrics/providers/lrclib.js';
+import { NeteaseProvider } from '../../core/src/lyrics/providers/netease.js';
+import { LocalLyricsProvider } from '../../core/src/lyrics/providers/local.js';
 import Header from './components/Header.js';
 import StatusBar from './components/StatusBar.js';
 import ControlBar from './components/ControlBar.js';
@@ -59,6 +62,9 @@ export default function App() {
       });
 
       const lyrics = new LyricsManager(library);
+      lyrics.registerProvider('lrclib', new LRCLibProvider());
+      lyrics.registerProvider('netease', new NeteaseProvider());
+      lyrics.registerProvider('local', new LocalLyricsProvider());
       lyricsRef.current = lyrics;
 
       intervalRef.current = setInterval(() => {

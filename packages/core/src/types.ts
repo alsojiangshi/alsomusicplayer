@@ -78,4 +78,8 @@ export interface AppConfig {
   library: {
     musicDirs: string[];
   };
+  search: {
+    enabledSources: string[];
+    defaultSource: string;
+  };
 }

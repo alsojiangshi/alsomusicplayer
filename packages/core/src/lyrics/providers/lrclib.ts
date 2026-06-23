@@ -2,12 +2,14 @@
 
 import type { LyricsData } from '../../types.js';
 import type { LyricsProvider } from './base.js';
+import { getHttpClient } from '../../utils/http.js';
 
 export class LRCLibProvider implements LyricsProvider {
   readonly name = 'lrclib';
   private base = 'https://lrclib.net/api';
 
   async search(title: string, artist: string, album = '', duration = 0): Promise<LyricsData | null> {
+    const fetch = getHttpClient();
     const params = new URLSearchParams({ track_name: title, artist_name: artist });
     if (album) params.set('album_name', album);
     if (duration > 0) params.set('duration', String(Math.round(duration)));

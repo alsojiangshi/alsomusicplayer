@@ -1,6 +1,7 @@
 /** 配置管理 */
 
 import type { AppConfig, PlaybackMode } from './types.js';
+import type { StorageProvider } from './database/storage.js';
 
 const DEFAULT_CONFIG: AppConfig = {
   audio: { volume: 80, muted: false, playbackMode: 'sequential' as PlaybackMode },
@@ -8,6 +9,7 @@ const DEFAULT_CONFIG: AppConfig = {
   s3: { endpoint: '', accessKey: '', secretKey: '', bucket: '', prefix: '', region: 'us-east-1', useSsl: true },
   openlist: { serverUrl: '', username: '', password: '' },
   library: { musicDirs: [] },
+  search: { enabledSources: ['netease'], defaultSource: 'netease' },
 };
 
 let _config: AppConfig = { ...DEFAULT_CONFIG };
@@ -37,22 +39,34 @@ export function getConfigValue<T>(path: string, defaultValue?: T): T {
   return (value !== undefined ? value : defaultValue) as T;
 }
 
-export async function loadConfig(configPath: string): Promise<void> {
+export async function loadConfig(configPath: string, storage?: StorageProvider): Promise<void> {
   _configPath = configPath;
   try {
-    const file = Bun.file(configPath);
-    if (await file.exists()) {
-      const data = await file.json();
-      _config = deepMerge(DEFAULT_CONFIG, data);
+    if (storage) {
+      if (await storage.fileExists(configPath)) {
+        const text = await storage.readTextFile(configPath);
+        _config = deepMerge(DEFAULT_CONFIG, JSON.parse(text));
+      }
+    } else {
+      const file = Bun.file(configPath);
+      if (await file.exists()) {
+        const data = await file.json();
+        _config = deepMerge(DEFAULT_CONFIG, data);
+      }
     }
   } catch {
     _config = { ...DEFAULT_CONFIG };
   }
 }
 
-export async function saveConfig(): Promise<void> {
+export async function saveConfig(storage?: StorageProvider): Promise<void> {
   if (!_configPath) return;
-  await Bun.write(_configPath, JSON.stringify(_config, null, 2));
+  const json = JSON.stringify(_config, null, 2);
+  if (storage) {
+    await storage.writeTextFile(_configPath, json);
+  } else {
+    await Bun.write(_configPath, json);
+  }
 }
 
 function deepMerge(base: any, override: any): any {
