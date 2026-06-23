@@ -81,5 +81,27 @@ export interface AppConfig {
   search: {
     enabledSources: string[];
     defaultSource: string;
+    sources: Record<string, SearchSourceConfig>;
   };
+}
+
+/** 搜索源配置 — 描述一个第三方音乐搜索 API 的参数 */
+export interface SearchSourceConfig {
+  label: string;
+  /** 搜索 URL 模板，{query} 会被替换为搜索词 */
+  searchUrl: string;
+  /** HTTP 请求头 */
+  searchHeaders?: Record<string, string>;
+  /** 结果数组中每项的 JSON 路径映射 */
+  mapping: {
+    id: string;
+    name: string;
+    artist: string;
+    album?: string;
+    duration?: string;
+  };
+  /** 搜索结果 JSON 中歌曲数组的路径，如 "result.songs" */
+  resultPath: string;
+  /** 播放 URL 模板，{id} 会被替换为歌曲 ID */
+  playbackUrlTemplate: string;
 }

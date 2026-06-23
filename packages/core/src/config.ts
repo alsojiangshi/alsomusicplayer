@@ -9,7 +9,20 @@ const DEFAULT_CONFIG: AppConfig = {
   s3: { endpoint: '', accessKey: '', secretKey: '', bucket: '', prefix: '', region: 'us-east-1', useSsl: true },
   openlist: { serverUrl: '', username: '', password: '' },
   library: { musicDirs: [] },
-  search: { enabledSources: ['netease'], defaultSource: 'netease' },
+  search: {
+    enabledSources: ['netease'],
+    defaultSource: 'netease',
+    sources: {
+      netease: {
+        label: '网易云音乐',
+        searchUrl: 'https://music.163.com/api/search/get?type=1&limit=20&offset=0',
+        searchHeaders: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' },
+        resultPath: 'result.songs',
+        mapping: { id: 'id', name: 'name', artist: 'ar[0].name', album: 'al.name', duration: 'dt' },
+        playbackUrlTemplate: 'https://music.163.com/song/media/outer/url?id={id}.mp3',
+      },
+    },
+  },
 };
 
 let _config: AppConfig = { ...DEFAULT_CONFIG };

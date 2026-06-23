@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import type { Track } from '@core';
+import { getConfig } from '@core';
 import { proxyFetch } from '../utils/proxyFetch';
 
 type Tab = 'local' | 'url' | 'search';
@@ -143,38 +144,58 @@ function UrlTab({ onClose, onImported }: { onClose: () => void; onImported: (t: 
   );
 }
 
-// ── 网络搜索（网易云）────────────────────────────────────
+// ── 网络搜索（可配置多源）──────────────────────────────
+
+interface SearchResultItem { id: number; name: string; artist: string; album: string; duration: number; }
 
 function SearchTab({ onClose, onImported }: { onClose: () => void; onImported: (t: Track[]) => void }) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<NeteaseSong[]>([]);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [msg, setMsg] = useState('');
   const [added, setAdded] = useState<Set<number>>(new Set());
+  const [selectedSource, setSelectedSource] = useState('');
+
+  const searchConfig = getConfig().search;
+  const enabledSources = searchConfig?.enabledSources || ['netease'];
+  const currentSource = selectedSource || enabledSources[0];
+  const sourceCfg = searchConfig?.sources?.[currentSource];
 
   const handleSearch = async () => {
-    if (!query.trim()) return;
-    setSearching(true); setMsg('搜索中...');
+    if (!query.trim() || !sourceCfg) return;
+    setSearching(true); setMsg(`搜索中 (${sourceCfg.label})...`);
     try {
-      const resp = await proxyFetch(`https://music.163.com/api/search/get?s=${encodeURIComponent(query)}&type=1&limit=20&offset=0`, {
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' },
+      // 构建搜索 URL
+      const url = sourceCfg.searchUrl.includes('{query}')
+        ? sourceCfg.searchUrl.replace('{query}', encodeURIComponent(query))
+        : `${sourceCfg.searchUrl}${sourceCfg.searchUrl.includes('?') ? '&' : '?'}s=${encodeURIComponent(query)}`;
+      const resp = await proxyFetch(url, {
+        method: 'GET',
+        headers: sourceCfg.searchHeaders as Record<string, string>,
       });
       const data = await resp.json();
-      const songs: NeteaseSong[] = (data?.result?.songs || []).map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        artist: (s.artists || []).map((a: any) => a.name).join(' / '),
-        album: s.album?.name || '',
-        duration: (s.duration || 0) / 1000,
+
+      // 用 resultPath 提取结果数组
+      const items: any[] = resolvePath(data, sourceCfg.resultPath) || [];
+      const songs: SearchResultItem[] = items.map((s: any) => ({
+        id: resolvePath(s, sourceCfg.mapping.id),
+        name: resolvePath(s, sourceCfg.mapping.name) || 'Unknown',
+        artist: resolvePath(s, sourceCfg.mapping.artist) || 'Unknown Artist',
+        album: resolvePath(s, sourceCfg.mapping.album || '') || '',
+        duration: typeof resolvePath(s, sourceCfg.mapping.duration || '') === 'number'
+          ? resolvePath(s, sourceCfg.mapping.duration || '') / 1000  // 毫秒→秒
+          : 0,
       }));
+
       setResults(songs);
       setMsg(songs.length ? `找到 ${songs.length} 首` : '无结果');
     } catch { setMsg('搜索失败，请检查网络'); }
     setSearching(false);
   };
 
-  const handleAdd = (song: NeteaseSong) => {
-    const track = makeTrack(song.name, song.artist, song.duration, `https://music.163.com/song/media/outer/url?id=${song.id}.mp3`, 'mp3', 0, song.id, 'openlist');
+  const handleAdd = (song: SearchResultItem) => {
+    const playbackUrl = (sourceCfg?.playbackUrlTemplate || '{id}').replace('{id}', String(song.id));
+    const track = makeTrack(song.name, song.artist, song.duration, playbackUrl, 'mp3', 0, song.id, 'openlist');
     onImported([track]);
     setAdded(prev => new Set(prev).add(song.id));
   };
@@ -189,10 +210,30 @@ function SearchTab({ onClose, onImported }: { onClose: () => void; onImported: (
           placeholder="搜索歌曲名、歌手..."
           className="flex-1 bg-bg-darkest border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent outline-none"
         />
-        <button onClick={handleSearch} disabled={searching} className="px-4 py-2 rounded-lg bg-accent-dim text-accent border border-accent/30 hover:bg-accent hover:text-bg-darkest text-sm disabled:opacity-50">
+        <button onClick={handleSearch} disabled={searching || !sourceCfg} className="px-4 py-2 rounded-lg bg-accent-dim text-accent border border-accent/30 hover:bg-accent hover:text-bg-darkest text-sm disabled:opacity-50">
           {searching ? '...' : '搜索'}
         </button>
       </div>
+
+      {/* 搜索源选择器（多源时显示） */}
+      {enabledSources.length > 1 && (
+        <div className="flex gap-1 flex-wrap">
+          {enabledSources.map(key => {
+            const src = searchConfig?.sources?.[key];
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedSource(key)}
+                className={`px-2 py-0.5 rounded text-xs transition-colors ${
+                  currentSource === key ? 'bg-accent-dim text-accent' : 'bg-bg-medium text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {src?.label || key}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {msg && <div className="text-sm text-accent">{msg}</div>}
 
@@ -224,7 +265,15 @@ function SearchTab({ onClose, onImported }: { onClose: () => void; onImported: (
 
 // ── 工具函数 ────────────────────────────────────────────
 
-type NeteaseSong = { id: number; name: string; artist: string; album: string; duration: number };
+function resolvePath(obj: any, path: string): any {
+  if (!obj || !path) return undefined;
+  return path.split('.').reduce((o, k) => {
+    if (o == null) return undefined;
+    const arrMatch = k.match(/^(\w+)\[(\d+)\]$/);
+    if (arrMatch) return o[arrMatch[1]]?.[parseInt(arrMatch[2])];
+    return o[k];
+  }, obj);
+}
 
 function makeTrack(title: string, artist: string, duration: number, filePath: string, format: string, size: number, seed: number, source: Track['source'] = 'local'): Track {
   return {

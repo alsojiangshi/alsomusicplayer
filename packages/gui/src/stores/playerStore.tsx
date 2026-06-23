@@ -2,6 +2,7 @@ import { createContext, useContext, useRef, useState, useCallback, type ReactNod
 import type { Track, Playlist } from '@core';
 import { PlaybackMode, PlaybackState } from '@core';
 import type { LibraryManager, Database } from '@core';
+import { proxyFetch } from '../utils/proxyFetch';
 
 interface PlayerCtx {
   currentTrack: Track | null;
@@ -53,6 +54,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [position, setPosition] = useState(0);
   const [allTracks, setAllTracks] = useState<Track[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [downloading, setDownloading] = useState(false);
 
   const initLibrary = useCallback((library: LibraryManager, db: Database) => {
     libraryRef.current = library;
@@ -68,8 +70,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   audio.onpause = () => setState(PlaybackState.Paused);
   audio.onended = () => { setState(PlaybackState.Stopped); next(); };
 
-  const loadAndPlay = useCallback((track: Track) => {
-    audio.src = track.filePath;
+  const loadAndPlay = useCallback(async (track: Track) => {
+    let src = track.filePath;
+
+    // 远程 URL → 通过 Tauri HTTP 代理下载为 blob URL（绕过 CORS）
+    if (/^https?:\/\//.test(src)) {
+      try {
+        setDownloading(true);
+        const resp = await proxyFetch(src);
+        const blob = await resp.blob();
+        src = URL.createObjectURL(blob);
+      } catch {
+        // 下载失败，回退到原始 URL
+      }
+      setDownloading(false);
+    }
+
+    audio.src = src;
     audio.play().catch(() => {});
     setCurrentTrack(track);
   }, [audio]);

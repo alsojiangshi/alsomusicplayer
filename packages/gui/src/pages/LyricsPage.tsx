@@ -10,13 +10,15 @@ export default function LyricsPage() {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
-  // 初始化 LyricsManager（单例 ref）
+  // 初始化 LyricsManager（useEffect 中，不污染 render）
   const lyricsRef = useRef<LyricsManager | null>(null);
-  if (!lyricsRef.current && libraryManager) {
-    lyricsRef.current = new LyricsManager(libraryManager);
-    lyricsRef.current.registerProvider('lrclib', new LRCLibProvider());
-    lyricsRef.current.registerProvider('netease', new NeteaseProvider());
-  }
+  useEffect(() => {
+    if (libraryManager && !lyricsRef.current) {
+      lyricsRef.current = new LyricsManager(libraryManager);
+      lyricsRef.current.registerProvider('lrclib', new LRCLibProvider());
+      lyricsRef.current.registerProvider('netease', new NeteaseProvider());
+    }
+  }, [libraryManager]);
 
   useEffect(() => {
     if (!currentTrack || !libraryManager) {
@@ -29,11 +31,10 @@ export default function LyricsPage() {
     const loadLyrics = async () => {
       setLoading(true);
       setStatusMsg('搜索歌词中...');
-      setLines([]);
 
       try {
-        // 1. 查缓存
-        const cached = libraryManager.getCachedLyrics(currentTrack.id);
+        // 1. 查缓存（使用 LyricsManager.getCached — 它正确映射 snake_case → camelCase）
+        const cached = lyricsRef.current?.getCached(currentTrack.id);
         if (cancelled) return;
 
         if (cached && (cached.syncedText || cached.plainText)) {
@@ -55,7 +56,6 @@ export default function LyricsPage() {
         if (cancelled) return;
 
         if (result) {
-          // 解析并显示
           const parsed = result.syncedText
             ? LRCParser.parse(result.syncedText)
             : result.plainText
@@ -72,12 +72,12 @@ export default function LyricsPage() {
             language: result.language || 'original',
           });
         } else {
-          setLines([]);
+          // 在线搜索失败，保留已有歌词（不清空）
           setStatusMsg('未找到歌词');
         }
       } catch (e: any) {
         if (!cancelled) {
-          setLines([]);
+          // 网络错误也保留已有歌词
           setStatusMsg(`加载失败: ${e?.message || '未知错误'}`);
         }
       }
@@ -90,8 +90,7 @@ export default function LyricsPage() {
 
   // 手动重新搜索
   const handleSearch = async () => {
-    if (!currentTrack || !libraryManager) return;
-    if (!lyricsRef.current) return;
+    if (!currentTrack || !libraryManager || !lyricsRef.current) return;
     setLoading(true);
     setStatusMsg('重新搜索...');
     try {
@@ -116,7 +115,6 @@ export default function LyricsPage() {
           language: result.language || 'original',
         });
       } else {
-        setLines([]);
         setStatusMsg('未找到歌词');
       }
     } catch {

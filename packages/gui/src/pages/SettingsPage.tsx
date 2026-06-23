@@ -27,12 +27,45 @@ export default function SettingsPage() {
     }
   };
 
+  const [newSourceName, setNewSourceName] = useState('');
+  const [newSourceUrl, setNewSourceUrl] = useState('');
+  const [newSourcePlayback, setNewSourcePlayback] = useState('');
+
   const toggleSearchSource = (name: string) => {
-    const sources = [...cfg.search.enabledSources];
-    const idx = sources.indexOf(name);
-    if (idx >= 0) sources.splice(idx, 1);
-    else sources.push(name);
-    update('search', 'enabledSources', sources);
+    const enabled = [...cfg.search.enabledSources];
+    const idx = enabled.indexOf(name);
+    if (idx >= 0) enabled.splice(idx, 1);
+    else enabled.push(name);
+    update('search', 'enabledSources', enabled);
+  };
+
+  const addSearchSource = () => {
+    const key = newSourceName.trim().toLowerCase().replace(/\s+/g, '_');
+    if (!key || !newSourceUrl.trim()) return;
+    const sources = { ...cfg.search.sources };
+    sources[key] = {
+      label: newSourceName.trim(),
+      searchUrl: newSourceUrl.trim(),
+      searchHeaders: { 'User-Agent': 'Mozilla/5.0' },
+      resultPath: 'result.songs',
+      mapping: { id: 'id', name: 'name', artist: 'ar[0].name', album: 'al.name', duration: 'dt' },
+      playbackUrlTemplate: newSourcePlayback.trim() || '{id}',
+    };
+    if (!cfg.search.enabledSources.includes(key)) {
+      update('search', 'enabledSources', [...cfg.search.enabledSources, key]);
+    }
+    update('search', 'sources', sources);
+    setNewSourceName('');
+    setNewSourceUrl('');
+    setNewSourcePlayback('');
+  };
+
+  const removeSearchSource = (name: string) => {
+    if (name === 'netease') return; // 内置源不可删除
+    const sources = { ...cfg.search.sources };
+    delete sources[name];
+    update('search', 'sources', sources);
+    update('search', 'enabledSources', cfg.search.enabledSources.filter(s => s !== name));
   };
 
   return (
@@ -73,19 +106,60 @@ export default function SettingsPage() {
         <section className="bg-bg-darkest border border-border rounded-xl p-5">
           <h2 className="font-bold mb-3">🔍 网络搜索</h2>
           <div className="space-y-3 text-sm">
-            <div className="text-text-secondary mb-2">搜索源</div>
-            {[
-              { key: 'netease', label: '网易云音乐' },
-            ].map(src => (
-              <label key={src.key} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={cfg.search.enabledSources.includes(src.key)}
-                  onChange={() => toggleSearchSource(src.key)}
-                />
-                {src.label}
-              </label>
+            {/* 已有搜索源列表 */}
+            <div className="text-text-secondary">已启用的搜索源</div>
+            {Object.entries(cfg.search.sources).map(([key, src]) => (
+              <div key={key} className="flex items-center justify-between bg-bg-medium rounded-lg px-3 py-1.5">
+                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                  <input
+                    type="checkbox"
+                    checked={cfg.search.enabledSources.includes(key)}
+                    onChange={() => toggleSearchSource(key)}
+                  />
+                  <span>{src.label}</span>
+                  <span className="text-xs text-text-muted truncate max-w-[160px]">{src.searchUrl}</span>
+                </label>
+                {key !== 'netease' && (
+                  <button
+                    onClick={() => removeSearchSource(key)}
+                    className="px-1.5 py-0.5 rounded text-xs text-text-muted hover:text-red-400 hover:bg-red-900/30"
+                    title="删除"
+                  >✕</button>
+                )}
+              </div>
             ))}
+
+            {/* 添加自定义搜索源 */}
+            <div className="border-t border-border pt-3 mt-3">
+              <div className="text-text-secondary mb-2">添加自定义搜索源</div>
+              <div className="space-y-2">
+                <input
+                  placeholder="名称 (e.g. MyMusic)"
+                  value={newSourceName}
+                  onChange={e => setNewSourceName(e.target.value)}
+                  className="w-full bg-bg-medium border border-border rounded px-2 py-1.5 text-text-primary placeholder:text-text-muted"
+                />
+                <input
+                  placeholder="搜索 URL 模板 (e.g. https://api.example.com/search?q={query})"
+                  value={newSourceUrl}
+                  onChange={e => setNewSourceUrl(e.target.value)}
+                  className="w-full bg-bg-medium border border-border rounded px-2 py-1.5 text-text-primary placeholder:text-text-muted"
+                />
+                <input
+                  placeholder="播放 URL 模板 (e.g. https://api.example.com/stream/{id})"
+                  value={newSourcePlayback}
+                  onChange={e => setNewSourcePlayback(e.target.value)}
+                  className="w-full bg-bg-medium border border-border rounded px-2 py-1.5 text-text-primary placeholder:text-text-muted"
+                />
+                <button
+                  onClick={addSearchSource}
+                  disabled={!newSourceName.trim() || !newSourceUrl.trim()}
+                  className="w-full px-3 py-1.5 rounded-lg bg-accent-dim text-accent border border-accent/30 hover:bg-accent hover:text-bg-darkest text-xs disabled:opacity-50"
+                >
+                  ＋ 添加搜索源
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
