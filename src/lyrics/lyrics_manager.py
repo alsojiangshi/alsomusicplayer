@@ -5,12 +5,11 @@
 
 from typing import Callable, Optional
 
-from PySide6.QtCore import QThreadPool
-
 from ..config import config
 from ..core.library_manager import LibraryManager
 from ..database import db
-from ..utils.workers import Worker
+# Worker 只在 GUI 模式中使用，CLI 不依赖 PySide6
+# from ..utils.workers import Worker  # lazy import
 from .lrc_parser import LRCParser
 from .providers.base import LyricsProvider
 from .providers.local_file import LocalFileProvider
@@ -124,14 +123,19 @@ class LyricsManager:
                 self._cache_lyrics(song_id, lyrics_data)
             return lyrics_data
 
-        worker = Worker(_search)
-        worker.signals.result.connect(
-            lambda data: callback(song_id, data)
-        )
-        worker.signals.error.connect(
-            lambda e: callback(song_id, None)
-        )
-        QThreadPool.globalInstance().start(worker)
+        try:
+            from ..utils.workers import Worker
+            from PySide6.QtCore import QThreadPool
+            worker = Worker(_search)
+            worker.signals.result.connect(lambda data: callback(song_id, data))
+            worker.signals.error.connect(lambda e: callback(song_id, None))
+            QThreadPool.globalInstance().start(worker)
+        except ImportError:
+            import threading
+            def _run():
+                data = _search()
+                callback(song_id, data)
+            threading.Thread(target=_run, daemon=True).start()
 
     def import_local_lyrics(self, song_id: int, content: str) -> bool:
         """导入本地歌词文件内容。

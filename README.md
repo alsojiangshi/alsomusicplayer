@@ -1,171 +1,136 @@
 # 🎵 MusicPlayer
 
-跨平台轻量音乐播放器，支持 Linux 和 Windows。
+跨平台轻量音乐播放器 — Linux / Windows。同时提供 CLI/TUI 和 GUI 两种前端，共享核心引擎。
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Build](https://github.com/alsojiangshi/alsomusicplayer/actions/workflows/build.yml/badge.svg)](https://github.com/alsojiangshi/alsomusicplayer/actions/workflows/build.yml)
 
 ## 功能特性
 
 - 🎧 **多格式支持** — WAV, OGG, MP3, FLAC, M4A, AAC, OPUS 等
 - 🎤 **智能歌词** — 在线多源搜索 (LRCLIB + 网易云)，本地 .lrc/.txt 导入
 - 📁 **多源导入** — 本地文件/文件夹、S3/MinIO 对象存储、OpenList 服务
-- 🎨 **现代 UI** — 暗色主题、圆角设计、流畅动画
+- 🎨 **双前端** — 终端 TUI (textual) + 图形 GUI (PySide6)，共享同一核心引擎
 - 📋 **播放列表** — 创建/管理播放列表、收藏、播放历史
 - 🔀 **播放模式** — 顺序、随机、单曲循环、列表循环
-- ⌨️ **快捷键** — 空格播放/暂停、Ctrl+←→ 切歌、Ctrl+↑↓ 音量
-- 📦 **便携版** — PyInstaller 打包，解压即用
+- 📦 **6 种便携版** — CLI / GUI / CLI+GUI × Linux / Windows
 
 ## 快速开始
 
 ### 环境要求
 
 - Python 3.11+
-- `pip` 包管理器
+- Linux: `libegl1 libgl1 gstreamer` 等多媒体库
 
-### 安装
+### 安装 & 运行
 
 ```bash
-# 克隆项目
-git clone <repo-url>
-cd music-player
+git clone https://github.com/alsojiangshi/alsomusicplayer.git
+cd alsomusicplayer
 
-# 安装依赖
-make install-deps
-# 或
 pip install -r requirements.txt --break-system-packages
-
-# 初始化
-make init
 ```
 
-### 运行
-
 ```bash
-# 方式 1：使用 Makefile
-make run
+# CLI/TUI 终端版
+python src/main.py --cli
 
-# 方式 2：直接运行
-python -m src.main
+# GUI 图形界面版
+python src/main.py --gui
+
+# 自动选择（有桌面环境则 GUI，否则 CLI）
+python src/main.py
 ```
 
 ### 构建便携版
 
 ```bash
-# Linux 便携版
-make build-linux
+# 当前平台全量构建 (3 个变体)
+python build/build.py
 
-# Windows 便携版
-make build-windows
+# 仅 Linux / 仅 GUI
+python build/build.py --linux --variant gui
 
-# 构建物：
-#   dist/linux/MusicPlayer       — Linux 可执行文件
-#   dist/windows/MusicPlayer.exe — Windows 可执行文件
+# 产物结构：
+#   dist/linux/
+#     MusicPlayer-cli-linux      — CLI/TUI 终端版
+#     MusicPlayer-gui-linux       — GUI 图形界面版
+#     MusicPlayer-full-linux      — CLI + GUI 合一版
+#   dist/windows/
+#     MusicPlayer-cli-windows.exe
+#     MusicPlayer-gui-windows.exe
+#     MusicPlayer-full-windows.exe
 ```
 
-## 使用指南
+### 一键构建 & 发布 (CI)
 
-### 1. 导入音乐
+```bash
+git tag v1.0.0 && git push --tags
+```
 
-#### 本地导入
-1. 点击左侧「＋ 导入音乐」按钮
-2. 选择「本地文件/文件夹」
-3. 添加音乐文件或整个文件夹
-4. 点击「开始导入」
-
-#### S3/MinIO 导入
-1. 先在「设置 → S3 存储」中配置连接信息：
-   - Endpoint（如 `http://localhost:9000`）
-   - Access Key / Secret Key
-   - Bucket 名称、Prefix 前缀
-2. 在导入对话框中选择「S3 / MinIO 存储」
-3. 点击「开始导入」
-
-#### OpenList 导入
-1. 先在「设置 → OpenList」中配置：
-   - 服务器地址（如 `http://localhost:5244`）
-   - 用户名 / 密码
-2. 在导入对话框中选择「OpenList 服务」
-3. 指定远程路径
-4. 点击「开始导入」
-
-### 2. 在线歌词
-
-- 播放歌曲时自动搜索歌词
-- 在「歌词」页面可以手动搜索或导入本地 .lrc 文件
-- 支持带节奏的同步歌词（LRC 格式）和纯文本歌词
-
-### 3. 播放列表
-
-- 创建自定义播放列表
-- 向播放列表添加/移除歌曲
-- 支持将歌曲「添加到队列」进行临时播放
-
-### 4. 快捷键
-
-| 快捷键 | 功能 |
-|--------|------|
-| `Space` | 播放/暂停 |
-| `Ctrl + →` | 下一首 |
-| `Ctrl + ←` | 上一首 |
-| `Ctrl + ↑` | 音量 + |
-| `Ctrl + ↓` | 音量 - |
-| `Ctrl + M` | 静音 |
-| `Ctrl + I` | 导入音乐 |
+GitHub Actions 自动构建 6 个产物并发布到 Releases。
 
 ## 项目结构
 
 ```
-music-player/
-├── src/                        # 源代码
-│   ├── main.py                 # 入口点
-│   ├── app.py                  # 应用控制器
-│   ├── config.py               # 配置管理
-│   ├── database.py             # 数据库 ORM
-│   ├── core/                   # 核心模块
-│   │   ├── audio_engine.py     # 音频播放引擎
-│   │   ├── playlist_engine.py  # 播放队列管理
-│   │   └── library_manager.py  # 音乐库管理
-│   ├── ui/                     # 用户界面
-│   │   ├── main_window.py      # 主窗口
-│   │   ├── player_bar.py       # 播放控制栏
-│   │   ├── library_page.py     # 音乐库页面
-│   │   ├── playlist_page.py    # 播放列表页面
-│   │   ├── lyrics_page.py      # 歌词页面
-│   │   ├── settings_page.py    # 设置页面
-│   │   ├── import_dialog.py    # 导入对话框
-│   │   ├── theme.py            # 暗色主题
-│   │   └── components/         # 可复用组件
-│   ├── lyrics/                 # 歌词模块
-│   │   ├── lyrics_manager.py   # 歌词管理器
-│   │   ├── lrc_parser.py       # LRC 解析器
-│   │   └── providers/          # 歌词提供者
-│   │       ├── lrclib.py       # LRCLIB.net
-│   │       ├── netease.py      # 网易云音乐
-│   │       └── local_file.py   # 本地文件
-│   ├── importers/              # 导入器
-│   │   ├── local_importer.py   # 本地导入
-│   │   ├── s3_importer.py      # S3 导入
-│   │   └── openlist_importer.py # OpenList 导入
-│   └── utils/                  # 工具函数
-│       ├── metadata.py         # 音频元数据
-│       ├── file_utils.py       # 文件工具
-│       └── workers.py          # 后台线程
-├── resources/                  # 资源文件
-├── build/                      # PyInstaller 构建配置
-├── requirements.txt
-├── Makefile
-└── README.md
+src/
+├── main.py          # 合一入口 (--cli / --gui)
+├── main_cli.py      # CLI 专属入口
+├── main_gui.py      # GUI 专属入口
+├── config.py        # 配置管理
+├── database.py      # SQLite + FTS5
+├── core/            # 共享核心引擎
+│   ├── audio_engine.py
+│   ├── playlist_engine.py
+│   └── library_manager.py
+├── gui/             # GUI 前端 (PySide6)
+│   ├── main_window.py
+│   ├── player_bar.py
+│   ├── library_page.py
+│   ├── lyrics_page.py
+│   └── ...
+├── cli/             # CLI/TUI 前端 (textual)
+│   ├── app.py
+│   ├── screens/
+│   ├── widgets/
+│   └── styles.tcss
+├── lyrics/          # 歌词系统
+│   ├── lrc_parser.py
+│   └── providers/
+│       ├── lrclib.py
+│       ├── netease.py
+│       └── local_file.py
+├── importers/       # 多源导入
+│   ├── local_importer.py
+│   ├── s3_importer.py
+│   └── openlist_importer.py
+└── utils/
 ```
+
+## 快捷键
+
+| 快捷键 | GUI | TUI | 功能 |
+|--------|-----|-----|------|
+| `Space` | ✅ | ✅ | 播放/暂停 |
+| `Ctrl+→` / `→` | ✅ | ✅ | 下一首 |
+| `Ctrl+←` / `←` | ✅ | ✅ | 上一首 |
+| `Ctrl+M` / `m` | ✅ | ✅ | 静音 |
+| `F1` | — | ✅ | 浏览音乐库 |
+| `F2` | — | ✅ | 正在播放 |
+| `q` | — | ✅ | 退出 |
+| `Ctrl+I` | ✅ | ✅ | 导入音乐 |
 
 ## 技术栈
 
-| 层面 | 技术选型 |
-|------|----------|
-| 语言 | Python 3.11+ |
-| GUI | PySide6 (Qt 6) |
-| 音频 | QMediaPlayer + mutagen |
+| 层面 | 技术 |
+|------|------|
+| GUI 前端 | PySide6 (Qt 6) |
+| TUI 前端 | textual |
+| 音频引擎 | QMediaPlayer + mutagen |
 | 数据库 | SQLite + FTS5 |
 | S3 | boto3 |
 | 打包 | PyInstaller |
 
 ## License
 
-MIT
+[MIT](LICENSE)

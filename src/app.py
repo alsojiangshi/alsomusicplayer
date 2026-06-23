@@ -11,7 +11,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from .config import config
-from .ui.main_window import MainWindow
+from .gui.main_window import MainWindow
 
 
 class MusicPlayerApp:
