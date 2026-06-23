@@ -1,0 +1,105 @@
+name: Build Portable Release
+
+on:
+  push:
+    tags:
+      - 'v*'               # 推送 tag 时触发
+  workflow_dispatch:        # 手动触发
+
+jobs:
+  # ── Linux 构建 ──────────────────────────────────────────
+  build-linux:
+    name: Build Linux Portable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 libgl1 libopengl0 \
+            libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 \
+            libpulse0
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller build/linux.spec \
+            --distpath dist/linux \
+            --workpath build/linux-work \
+            --noconfirm
+
+      - name: Package as tar.gz
+        run: |
+          cd dist/linux
+          tar -czf ../../MusicPlayer-linux-x86_64.tar.gz MusicPlayer
+          cd ../..
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicPlayer-linux-x86_64
+          path: MusicPlayer-linux-x86_64.tar.gz
+
+  # ── Windows 构建 ────────────────────────────────────────
+  build-windows:
+    name: Build Windows Portable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller build/windows.spec `
+            --distpath dist/windows `
+            --workpath build/windows-work `
+            --noconfirm
+
+      - name: Package as zip
+        run: |
+          Compress-Archive `
+            -Path dist/windows/MusicPlayer.exe `
+            -DestinationPath MusicPlayer-windows-x86_64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MusicPlayer-windows-x86_64
+          path: MusicPlayer-windows-x86_64.zip
+
+  # ── 发布 ───────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            MusicPlayer-linux-x86_64/MusicPlayer-linux-x86_64.tar.gz
+            MusicPlayer-windows-x86_64/MusicPlayer-windows-x86_64.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

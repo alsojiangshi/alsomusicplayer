@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# PyInstaller
+build/linux-work/
+build/windows-work/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application data
+*.db
+*.db-journal
+*.db-wal
