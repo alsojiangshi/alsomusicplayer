@@ -2,8 +2,9 @@
   "$schema": "https://raw.githubusercontent.com/nicepage/nicepage/refs/heads/main/schema.json",
   "productName": "MusicPlayer",
   "version": "1.0.0",
-  "identifier": "com.music-player.app",
-  "build": { "beforeDevCommand": "bun run dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "bun run build", "frontendDist": "../dist" },
+  "identifier": "com.musicplayer.desktop",
+  "build": { "beforeDevCommand": "npx vite", "devUrl": "http://localhost:1420", "beforeBuildCommand": "npx vite build", "frontendDist": "../dist" },
   "app": { "withGlobalTauri": true, "windows": [{ "title": "🎵 MusicPlayer", "width": 1200, "height": 800, "minWidth": 800, "minHeight": 600 }], "security": { "csp": null } },
+  "bundle": { "active": true, "icon": ["icons/icon.png", "icons/icon.ico"], "targets": "all" },
   "plugins": { "shell": { "open": true } }
 }
