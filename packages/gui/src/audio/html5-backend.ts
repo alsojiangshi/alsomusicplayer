@@ -2,7 +2,11 @@ import type { AudioBackend } from '@core';
 
 export function createHtml5Backend(audioEl: HTMLAudioElement): AudioBackend {
   return {
-    get state() { return audioEl.paused ? (audioEl.currentTime === 0 ? 'stopped' : 'paused') : 'playing'; } as any,
+    get state() {
+      return audioEl.paused
+        ? (audioEl.currentTime === 0 ? 'stopped' : 'paused')
+        : 'playing';
+    } as AudioBackend['state'],
     get volume() { return Math.round(audioEl.volume * 100); },
     async load(src: string) { audioEl.src = src; },
     play() { audioEl.play(); },
