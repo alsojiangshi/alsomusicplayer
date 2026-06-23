@@ -1,6 +1,6 @@
 import { usePlayer } from '../stores/playerStore';
 import LyricsView from '../components/LyricsView';
-import type { LyricLine } from '../../../core/src/index.js';
+import type { LyricLine } from '@core';
 
 export default function LyricsPage() {
   const { currentTrack } = usePlayer();

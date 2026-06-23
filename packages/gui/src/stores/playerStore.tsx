@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, useCallback, type ReactNode } from 'react';
-import type { Track } from '../../../core/src/index.js';
-import { PlaybackMode, PlaybackState } from '../../../core/src/index.js';
+import type { Track } from '@core';
+import { PlaybackMode, PlaybackState } from '@core';
 
 interface PlayerCtx {
   currentTrack: Track | null;

@@ -1,4 +1,4 @@
-import type { AudioBackend } from '../../../core/src/index.js';
+import type { AudioBackend } from '@core';
 
 export function createHtml5Backend(audioEl: HTMLAudioElement): AudioBackend {
   return {

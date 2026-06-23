@@ -1,5 +1,5 @@
-import type { Track } from '../../../core/src/index.js';
-import { formatDuration } from '../../../core/src/index.js';
+import type { Track } from '@core';
+import { formatDuration } from '@core';
 
 interface Props { tracks: Track[]; onPlay?: (track: Track) => void; onDoubleClick?: (track: Track) => void; }
 

@@ -1,5 +1,5 @@
 import { usePlayer } from '../stores/playerStore';
-import type { LyricLine } from '../../../core/src/index.js';
+import type { LyricLine } from '@core';
 import { useEffect, useRef } from 'react';
 
 interface Props { lines: LyricLine[]; }

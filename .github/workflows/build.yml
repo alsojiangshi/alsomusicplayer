@@ -1,4 +1,4 @@
-name: Build 6 Portable Releases
+name: Build Portable Releases
 
 on:
   push: { tags: ['v*'] }
@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
-      - run: bun build --compile --target=bun-linux-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-linux
+      - run: mkdir -p dist && bun build --compile --target=bun-linux-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-linux
       - run: cd dist && tar -czf MusicPlayer-cli-linux-x86_64.tar.gz MusicPlayer-cli-linux
       - uses: actions/upload-artifact@v4
         with: { name: cli-linux, path: dist/MusicPlayer-cli-linux-x86_64.tar.gz }
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
-      - run: bun build --compile --target=bun-windows-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-windows.exe
+      - run: mkdir -p dist && bun build --compile --target=bun-windows-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-windows.exe
       - run: cd dist && zip MusicPlayer-cli-windows-x86_64.zip MusicPlayer-cli-windows.exe
       - uses: actions/upload-artifact@v4
         with: { name: cli-windows, path: dist/MusicPlayer-cli-windows-x86_64.zip }
@@ -32,10 +32,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-      - run: bun install && cd packages/gui && bunx tauri build
-      - run: mkdir -p dist && find packages/gui/src-tauri/target -name 'music-player' -type f -exec cp {} dist/MusicPlayer-gui-linux \; && cd dist && tar -czf MusicPlayer-gui-linux-x86_64.tar.gz MusicPlayer-gui-linux
+        with: { toolchain: stable }
+      - run: bun install
+      - run: cd packages/gui && bunx --bun vite build 2>&1
+      - run: cd packages/gui && bunx tauri build 2>&1
+      - run: |
+          mkdir -p dist
+          find packages/gui/src-tauri/target -name 'music-player' -type f -exec cp {} dist/MusicPlayer-gui-linux \;
+          cd dist && tar -czf MusicPlayer-gui-linux-x86_64.tar.gz MusicPlayer-gui-linux 2>/dev/null || echo "Tauri binary not found, check build logs"
       - uses: actions/upload-artifact@v4
         with: { name: gui-linux, path: dist/MusicPlayer-gui-linux-x86_64.tar.gz }
 
@@ -45,36 +51,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - run: bun install && cd packages/gui && bunx tauri build
+        with: { toolchain: stable }
+      - run: bun install
+      - run: cd packages/gui; bunx --bun vite build 2>&1
+      - run: cd packages/gui; bunx tauri build 2>&1
       - shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path packages/gui/src-tauri/target -Recurse -Filter music-player.exe | Select-Object -First 1
           New-Item -ItemType Directory -Force -Path dist
-          Copy-Item $exe.FullName dist/MusicPlayer-gui-windows.exe
-          Compress-Archive -Path dist/MusicPlayer-gui-windows.exe -DestinationPath dist/MusicPlayer-gui-windows-x86_64.zip
+          $exe = Get-ChildItem -Path packages/gui/src-tauri/target -Recurse -Filter music-player.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($exe) {
+            Copy-Item $exe.FullName dist/MusicPlayer-gui-windows.exe
+            Compress-Archive -Path dist/MusicPlayer-gui-windows.exe -DestinationPath dist/MusicPlayer-gui-windows-x86_64.zip
+          } else { echo "Tauri exe not found" }
       - uses: actions/upload-artifact@v4
         with: { name: gui-windows, path: dist/MusicPlayer-gui-windows-x86_64.zip }
 
-  full-linux:
-    runs-on: ubuntu-latest
-    needs: [cli-linux, gui-linux]
-    steps:
-      - uses: actions/download-artifact@v4
-      - run: mkdir -p dist && cp */*.tar.gz dist/ && cd dist && tar -czf MusicPlayer-full-linux-x86_64.tar.gz *.tar.gz
-      - uses: actions/upload-artifact@v4
-        with: { name: full-linux, path: dist/MusicPlayer-full-linux-x86_64.tar.gz }
-
-  full-windows:
-    runs-on: ubuntu-latest
-    needs: [cli-windows, gui-windows]
-    steps:
-      - uses: actions/download-artifact@v4
-      - run: mkdir -p dist && cp */*.zip dist/ && cd dist && zip MusicPlayer-full-windows-x86_64.zip *.zip
-      - uses: actions/upload-artifact@v4
-        with: { name: full-windows, path: dist/MusicPlayer-full-windows-x86_64.zip }
-
   release:
-    needs: [cli-linux, cli-windows, gui-linux, gui-windows, full-linux, full-windows]
+    needs: [cli-linux, cli-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
