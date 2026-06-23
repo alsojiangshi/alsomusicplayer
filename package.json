@@ -1,24 +1,37 @@
 {
   "name": "music-player",
   "private": true,
-  "workspaces": [
-    "packages/core",
-    "packages/gui",
-    "packages/cli"
-  ],
   "scripts": {
     "test": "bun test",
-    "lint": "tsc --noEmit",
-    "typecheck": "tsc --noEmit",
-    "build:core": "cd packages/core && bun run build",
     "dev:cli": "bun run packages/cli/src/main.ts",
     "build:cli:linux": "bun build --compile --target=bun-linux-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-linux",
     "build:cli:windows": "bun build --compile --target=bun-windows-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-windows",
-    "dev:gui": "cd packages/gui && bun run tauri dev",
-    "build:gui:linux": "cd packages/gui && bun run tauri build --target x86_64-unknown-linux-gnu",
-    "build:gui:windows": "cd packages/gui && bun run tauri build --target x86_64-pc-windows-msvc"
+    "dev:gui": "cd packages/gui && bunx --bun vite",
+    "build:gui": "cd packages/gui && bunx --bun vite build",
+    "build:gui:tauri": "cd packages/gui && bunx tauri build"
   },
   "dependencies": {
-    "react-devtools-core": "^7.0.1"
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/cli": "^2.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
+    "ink": "^5.0.1",
+    "music-metadata": "^10.3.0",
+    "react": "^18.3.1",
+    "react-devtools-core": "^7.0.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.10.3",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3"
   }
 }

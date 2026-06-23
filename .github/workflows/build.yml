@@ -4,6 +4,9 @@ on:
   push: { tags: ['v*'] }
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   cli-linux:
     runs-on: ubuntu-latest
@@ -36,12 +39,12 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with: { toolchain: stable }
       - run: bun install
-      - run: cd packages/gui && bunx --bun vite build 2>&1
-      - run: cd packages/gui && bunx tauri build 2>&1
+      - run: cd packages/gui && bunx --bun vite build
+      - run: cd packages/gui && bunx tauri build --target x86_64-unknown-linux-gnu
       - run: |
           mkdir -p dist
-          find packages/gui/src-tauri/target -name 'music-player' -type f -exec cp {} dist/MusicPlayer-gui-linux \;
-          cd dist && tar -czf MusicPlayer-gui-linux-x86_64.tar.gz MusicPlayer-gui-linux 2>/dev/null || echo "Tauri binary not found, check build logs"
+          find packages/gui/src-tauri/target -name 'music-player' -type f | head -1 | xargs -I{} cp {} dist/MusicPlayer-gui-linux
+          cd dist && tar -czf MusicPlayer-gui-linux-x86_64.tar.gz MusicPlayer-gui-linux
       - uses: actions/upload-artifact@v4
         with: { name: gui-linux, path: dist/MusicPlayer-gui-linux-x86_64.tar.gz }
 
@@ -53,16 +56,14 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with: { toolchain: stable }
       - run: bun install
-      - run: cd packages/gui; bunx --bun vite build 2>&1
-      - run: cd packages/gui; bunx tauri build 2>&1
+      - run: cd packages/gui; bunx --bun vite build
+      - run: cd packages/gui; bunx tauri build --target x86_64-pc-windows-msvc
       - shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
-          $exe = Get-ChildItem -Path packages/gui/src-tauri/target -Recurse -Filter music-player.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($exe) {
-            Copy-Item $exe.FullName dist/MusicPlayer-gui-windows.exe
-            Compress-Archive -Path dist/MusicPlayer-gui-windows.exe -DestinationPath dist/MusicPlayer-gui-windows-x86_64.zip
-          } else { echo "Tauri exe not found" }
+          $exe = Get-ChildItem -Path packages/gui/src-tauri/target -Recurse -Filter music-player.exe | Select-Object -First 1
+          Copy-Item $exe.FullName dist/MusicPlayer-gui-windows.exe
+          Compress-Archive -Path dist/MusicPlayer-gui-windows.exe -DestinationPath dist/MusicPlayer-gui-windows-x86_64.zip
       - uses: actions/upload-artifact@v4
         with: { name: gui-windows, path: dist/MusicPlayer-gui-windows-x86_64.zip }
 
@@ -70,9 +71,11 @@ jobs:
     needs: [cli-linux, cli-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v4
-      - run: mkdir -p release && find . -name '*.tar.gz' -o -name '*.zip' | grep -v full | xargs -I{} cp {} release/
+      - run: mkdir -p release && find . -name '*.tar.gz' -o -name '*.zip' | grep -v full | xargs -I{} cp {} release/ && ls -lh release/
       - uses: softprops/action-gh-release@v2
-        with: { files: release/*, generate_release_notes: true }
+        with: { files: release/* }
         env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
