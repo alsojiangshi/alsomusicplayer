@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { PlaybackMode } from '@music-player/core';
+import { PlaybackMode } from '../../../core/src/index.js';
 
 const MODE_STR: Record<string, string> = {
   sequential: '🔁 顺序', shuffle: '🔀 随机', repeat_one: '🔂 单曲', repeat_all: '🔄 全部',

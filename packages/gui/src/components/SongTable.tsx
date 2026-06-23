@@ -1,5 +1,5 @@
-import type { Track } from '@music-player/core';
-import { formatDuration } from '@music-player/core';
+import type { Track } from '../../../core/src/index.js';
+import { formatDuration } from '../../../core/src/index.js';
 
 interface Props { tracks: Track[]; onPlay?: (track: Track) => void; onDoubleClick?: (track: Track) => void; }
 

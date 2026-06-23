@@ -1,8 +1,8 @@
 import { usePlayer } from '../stores/playerStore';
-import { formatDuration } from '@music-player/core';
+import { formatDuration } from '../../../core/src/index.js';
 import CoverArt from './CoverArt';
 import SeekSlider from './SeekSlider';
-import { PlaybackMode } from '@music-player/core';
+import { PlaybackMode } from '../../../core/src/index.js';
 
 const MODE_ICONS: Record<string, string> = {
   sequential: '🔁', shuffle: '🔀', repeat_one: '🔂', repeat_all: '🔄',

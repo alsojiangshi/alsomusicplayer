@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { Track } from '@music-player/core';
+import type { Track } from '../../../core/src/index.js';
 
 interface Props { track: Track | null; position: number; duration: number; lyrics: string; }
 

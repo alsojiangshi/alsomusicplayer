@@ -1,8 +1,8 @@
 /** CLI 音频后端 — 基于 child_process + ffplay */
 
 import { ChildProcess, spawn } from 'child_process';
-import type { AudioBackend } from '@music-player/core';
-import { PlaybackState } from '@music-player/core';
+import type { AudioBackend } from '../../../core/src/index.js';
+import { PlaybackState } from '../../../core/src/index.js';
 
 export function createCliAudioBackend(): AudioBackend {
   let proc: ChildProcess | null = null;

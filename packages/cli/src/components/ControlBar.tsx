@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { PlaybackMode } from '@music-player/core';
+import { PlaybackMode } from '../../../core/src/index.js';
 
 const MODE_ICONS: Record<string, string> = {
   sequential: '🔁', shuffle: '🔀', repeat_one: '🔂', repeat_all: '🔄',

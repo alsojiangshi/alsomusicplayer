@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { usePlayer } from '../stores/playerStore';
 import SearchBar from '../components/SearchBar';
 import SongTable from '../components/SongTable';
-import type { Track } from '@music-player/core';
+import type { Track } from '../../../core/src/index.js';
 
 const MOCK_TRACKS: Track[] = [];
 

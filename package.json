@@ -17,5 +17,8 @@
     "dev:gui": "cd packages/gui && bun run tauri dev",
     "build:gui:linux": "cd packages/gui && bun run tauri build --target x86_64-unknown-linux-gnu",
     "build:gui:windows": "cd packages/gui && bun run tauri build --target x86_64-pc-windows-msvc"
+  },
+  "dependencies": {
+    "react-devtools-core": "^7.0.1"
   }
 }

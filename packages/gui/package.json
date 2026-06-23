@@ -10,7 +10,6 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@music-player/core": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
     "react": "^18.3.1",

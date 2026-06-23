@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { LibraryManager, PlaylistEngine, LyricsManager, Database, loadConfig, getDataDir, PlaybackMode } from '@music-player/core';
-import type { Track } from '@music-player/core';
-import type { AudioBackend } from '@music-player/core';
+import { LibraryManager, PlaylistEngine, LyricsManager, Database, loadConfig, getDataDir, PlaybackMode } from '../../core/src/index.js';
+import type { Track } from '../../core/src/index.js';
+import type { AudioBackend } from '../../core/src/index.js';
 import Header from './components/Header.js';
 import StatusBar from './components/StatusBar.js';
 import ControlBar from './components/ControlBar.js';

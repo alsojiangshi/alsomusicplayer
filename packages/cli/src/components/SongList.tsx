@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text } from 'ink';
 import { useInput } from 'ink';
-import type { Track } from '@music-player/core';
+import type { Track } from '../../../core/src/index.js';
 
 interface Props { tracks: Track[]; onPlay: (t: Track, idx: number) => void; onPlayAll: () => void; }
 
