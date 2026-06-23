@@ -1,147 +1,80 @@
 name: Build 6 Portable Releases
 
 on:
-  push:
-    tags:
-      - 'v*'
+  push: { tags: ['v*'] }
   workflow_dispatch:
 
 jobs:
-  # ── Linux 构建（3 变体）─────────────────────────────────
-  build-linux:
-    name: Linux — CLI / GUI / Full
+  cli-linux:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        variant:
-          - { key: cli,  name: CLI-TUI终端版 }
-          - { key: gui,  name: GUI图形界面版 }
-          - { key: full, name: CLI+GUI合一版 }
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with: { bun-version: latest }
+      - run: bun install
+      - run: bun build --compile --target=bun-linux-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-linux
+      - run: cd dist && tar -czf MusicPlayer-cli-linux-x86_64.tar.gz MusicPlayer-cli-linux
+      - uses: actions/upload-artifact@v4
+        with: { name: cli-linux, path: dist/MusicPlayer-cli-linux-x86_64.tar.gz }
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+  cli-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with: { bun-version: latest }
+      - run: bun install
+      - run: bun build --compile --target=bun-windows-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-windows.exe
+      - run: cd dist && zip MusicPlayer-cli-windows-x86_64.zip MusicPlayer-cli-windows.exe
+      - uses: actions/upload-artifact@v4
+        with: { name: cli-windows, path: dist/MusicPlayer-cli-windows-x86_64.zip }
 
-      - name: Install system deps
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            libegl1 libgl1 libopengl0 \
-            libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 \
-            libpulse0 \
-            libsdl2-2.0-0 libsdl2-mixer-2.0-0 libfreetype6
+  gui-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with: { bun-version: latest }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: bun install && cd packages/gui && bun run tauri build --target x86_64-unknown-linux-gnu
+      - run: cd packages/gui/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb && tar -czf MusicPlayer-gui-linux-x86_64.tar.gz music-player_*.deb 2>/dev/null || tar -czf ../../../../../../dist/MusicPlayer-gui-linux-x86_64.tar.gz -C packages/gui/src-tauri/target/x86_64-unknown-linux-gnu/release music-player
+      - uses: actions/upload-artifact@v4
+        with: { name: gui-linux, path: '**/MusicPlayer-gui-linux-x86_64.tar.gz' }
 
-      - name: Install Python deps
-        run: pip install -r requirements.txt
-
-      - name: Build (${{ matrix.variant.key }})
-        run: python build/build.py --linux --variant ${{ matrix.variant.key }}
-
-      - name: Package
-        run: |
-          cd dist/linux
-          tar -czf MusicPlayer-${{ matrix.variant.key }}-linux-x86_64.tar.gz MusicPlayer-${{ matrix.variant.key }}-linux
-          mv MusicPlayer-${{ matrix.variant.key }}-linux-x86_64.tar.gz ${{ github.workspace }}/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MusicPlayer-${{ matrix.variant.key }}-linux
-          path: MusicPlayer-${{ matrix.variant.key }}-linux-x86_64.tar.gz
-
-  # ── Windows 构建（3 变体）───────────────────────────────
-  build-windows:
-    name: Windows — CLI / GUI / Full
+  gui-windows:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        variant:
-          - { key: cli,  name: CLI-TUI终端版 }
-          - { key: gui,  name: GUI图形界面版 }
-          - { key: full, name: CLI+GUI合一版 }
     steps:
       - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with: { bun-version: latest }
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: bun install && cd packages/gui && bun run tauri build --target x86_64-pc-windows-msvc
+      - run: Compress-Archive -Path packages/gui/src-tauri/target/x86_64-pc-windows-msvc/release/music-player.exe -DestinationPath dist/MusicPlayer-gui-windows-x86_64.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: gui-windows, path: dist/MusicPlayer-gui-windows-x86_64.zip }
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+  full-linux:
+    runs-on: ubuntu-latest
+    needs: [cli-linux, gui-linux]
+    steps:
+      - uses: actions/download-artifact@v4
+      - run: mkdir -p dist && cp cli-linux/MusicPlayer-cli-linux-x86_64.tar.gz dist/ && cp gui-linux/MusicPlayer-gui-linux-x86_64.tar.gz dist/ && cd dist && tar -czf MusicPlayer-full-linux-x86_64.tar.gz *.tar.gz
 
-      - name: Install Python deps
-        run: pip install -r requirements.txt
+  full-windows:
+    runs-on: ubuntu-latest
+    needs: [cli-windows, gui-windows]
+    steps:
+      - uses: actions/download-artifact@v4
+      - run: mkdir -p dist && cp cli-windows/MusicPlayer-cli-windows-x86_64.zip dist/ && cp gui-windows/MusicPlayer-gui-windows-x86_64.zip dist/ && cd dist && zip MusicPlayer-full-windows-x86_64.zip *.zip
 
-      - name: Build (${{ matrix.variant.key }})
-        run: python build/build.py --windows --variant ${{ matrix.variant.key }}
-
-      - name: Package
-        run: |
-          cd dist/windows
-          Compress-Archive `
-            -Path MusicPlayer-${{ matrix.variant.key }}-windows.exe `
-            -DestinationPath MusicPlayer-${{ matrix.variant.key }}-windows-x86_64.zip
-          Copy-Item MusicPlayer-${{ matrix.variant.key }}-windows-x86_64.zip ${{ github.workspace }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: MusicPlayer-${{ matrix.variant.key }}-windows
-          path: MusicPlayer-${{ matrix.variant.key }}-windows-x86_64.zip
-
-  # ── 发布 ───────────────────────────────────────────────
   release:
-    name: Create GitHub Release
-    needs: [build-linux, build-windows]
+    needs: [cli-linux, cli-windows, gui-linux, gui-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/download-artifact@v4
-
-      - name: Flatten artifacts
-        run: |
-          mkdir -p release
-          find . -name "*.tar.gz" -exec cp {} release/ \;
-          find . -name "*.zip" -exec cp {} release/ \;
-          ls -lh release/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/*
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          body: |
-            ## 🎵 MusicPlayer 便携版
-
-            ### Linux (x86_64)
-            | 变体 | 说明 |
-            |------|------|
-            | `MusicPlayer-cli-linux-x86_64.tar.gz` | CLI/TUI 终端版 |
-            | `MusicPlayer-gui-linux-x86_64.tar.gz` | GUI 图形界面版 |
-            | `MusicPlayer-full-linux-x86_64.tar.gz` | CLI + GUI 合一版 |
-
-            ### Windows (x86_64)
-            | 变体 | 说明 |
-            |------|------|
-            | `MusicPlayer-cli-windows-x86_64.zip` | CLI/TUI 终端版 |
-            | `MusicPlayer-gui-windows-x86_64.zip` | GUI 图形界面版 |
-            | `MusicPlayer-full-windows-x86_64.zip` | CLI + GUI 合一版 |
-
-            ### 使用说明
-            ```bash
-            # CLI 版
-            ./MusicPlayer-cli     # 启动终端音乐播放器
-
-            # GUI 版
-            ./MusicPlayer-gui     # 启动图形界面
-
-            # 合一版
-            ./MusicPlayer-full --cli   # CLI 模式
-            ./MusicPlayer-full --gui   # GUI 模式
-            ./MusicPlayer-full         # 自动选择（有桌面环境则 GUI）
-            ```
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: mkdir release && find . -name '*.tar.gz' -o -name '*.zip' | xargs -I{} cp {} release/ && ls -lh release/
+      - uses: softprops/action-gh-release@v2
+        with: { files: release/*, generate_release_notes: true }
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
