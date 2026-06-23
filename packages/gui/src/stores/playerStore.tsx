@@ -130,6 +130,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         for (const track of fresh) {
           const id = lib.addSong(track);
           if (id !== null) track.id = id; // 更新为 DB 分配的 ID（跳过重复）
+        }
         db.save().catch(() => {});
       }
       return [...prev, ...fresh];
