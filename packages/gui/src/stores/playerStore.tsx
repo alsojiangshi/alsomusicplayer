@@ -10,6 +10,7 @@ interface PlayerCtx {
   duration: number;
   position: number;
   queue: Track[];
+  allTracks: Track[];
   togglePlay: () => void;
   next: () => void;
   prev: () => void;
@@ -19,6 +20,7 @@ interface PlayerCtx {
   cycleMode: () => void;
   setQueue: (tracks: Track[], startIdx?: number) => void;
   playIndex: (idx: number) => void;
+  addTracks: (tracks: Track[]) => void;
 }
 
 const Ctx = createContext<PlayerCtx>(null!);
@@ -35,6 +37,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<PlaybackMode>(PlaybackMode.Sequential);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
+  const [allTracks, setAllTracks] = useState<Track[]>([]);
 
   const audio = audioRef.current;
   audio.volume = volume / 100;
@@ -96,8 +99,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const addTracks = useCallback((tracks: Track[]) => {
+    setAllTracks(prev => {
+      const existing = new Set(prev.map(t => t.filePath));
+      const fresh = tracks.filter(t => !existing.has(t.filePath));
+      return [...prev, ...fresh];
+    });
+  }, []);
+
   return (
-    <Ctx.Provider value={{ currentTrack, state, volume, mode, duration, position, queue: queueRef.current, togglePlay, next, prev, seek, setVolume: (v) => { setVol(v); audio.volume = v / 100; }, toggleMute: () => { audio.muted = !audio.muted; }, cycleMode, setQueue, playIndex }}>
+    <Ctx.Provider value={{ currentTrack, state, volume, mode, duration, position, queue: queueRef.current, allTracks, togglePlay, next, prev, seek, setVolume: (v) => { setVol(v); audio.volume = v / 100; }, toggleMute: () => { audio.muted = !audio.muted; }, cycleMode, setQueue, playIndex, addTracks }}>
       {children}
     </Ctx.Provider>
   );
