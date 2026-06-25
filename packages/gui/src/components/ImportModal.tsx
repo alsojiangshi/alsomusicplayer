@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getConfig, type Track } from '@core';
 import { usePlayer } from '../stores/playerStore';
 import { isSupportedLocalAudioName } from '../utils/libraryImport';
@@ -70,37 +70,75 @@ function LocalTab({ onClose }: { onClose: () => void }) {
   const [files, setFiles] = useState<File[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState('');
+  const [details, setDetails] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+
+  const updateSelectedFiles = (nextFiles: File[]) => {
+    const supported = nextFiles.filter(file => isSupportedLocalAudioName(file.name));
+    const ignored = nextFiles.length - supported.length;
+
+    setFiles(supported);
+    setDetails([]);
+
+    if (nextFiles.length === 0) {
+      setProgress('');
+      return;
+    }
+
+    if (supported.length === 0) {
+      setProgress('选择的内容里没有受支持的音频文件');
+      return;
+    }
+
+    setProgress(
+      ignored > 0
+        ? `已选择 ${supported.length} 个音频文件，忽略 ${ignored} 个非音频文件`
+        : `已选择 ${supported.length} 个音频文件`,
+    );
+  };
 
   const handleImport = async () => {
     if (files.length === 0 || importing) {
+      if (files.length === 0) {
+        setProgress('请先选择要导入的音频文件');
+      }
       return;
     }
 
     setImporting(true);
     setProgress(`正在导入 ${files.length} 个文件...`);
+    setDetails([]);
 
-    const result = await importLocalItems(files);
-    setProgress(formatImportSummary(result));
-    setImporting(false);
-    setFiles([]);
+    try {
+      const result = await importLocalItems(files);
+      const summary = formatImportSummary(result);
+      setProgress(summary);
+      setDetails(result.errors.map(formatImportDetail));
+      setImporting(false);
 
-    window.setTimeout(() => {
-      setProgress('');
-      onClose();
-    }, 1200);
+      if (result.added > 0 && result.failed === 0) {
+        setFiles([]);
+        window.setTimeout(() => {
+          setProgress('');
+          setDetails([]);
+          onClose();
+        }, 1200);
+      }
+    } catch (error: unknown) {
+      setImporting(false);
+      setProgress('导入失败');
+      setDetails([formatUnknownError(error)]);
+    }
   };
 
   return (
     <div className="space-y-3">
-      <div
+      <label
         className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-all ${
           dragOver
             ? 'scale-[1.01] border-accent bg-accent-dim/30'
             : 'border-border hover:border-accent'
         }`}
-        onClick={() => inputRef.current?.click()}
         onDragOver={event => {
           event.preventDefault();
           setDragOver(true);
@@ -109,11 +147,7 @@ function LocalTab({ onClose }: { onClose: () => void }) {
         onDrop={event => {
           event.preventDefault();
           setDragOver(false);
-          setFiles(
-            Array.from(event.dataTransfer.files).filter(file =>
-              isSupportedLocalAudioName(file.name),
-            ),
-          );
+          updateSelectedFiles(Array.from(event.dataTransfer.files));
         }}
       >
         <p className="mb-1 text-3xl">{dragOver ? '📥' : '🎵'}</p>
@@ -121,20 +155,15 @@ function LocalTab({ onClose }: { onClose: () => void }) {
           {dragOver ? '松手即可导入' : '点击选择或拖拽音频文件到这里'}
         </p>
         <input
-          ref={inputRef}
           type="file"
           multiple
           accept=".mp3,.flac,.wav,.ogg,.oga,.m4a,.mp4,.aac,.opus,.wma,.aiff,.aif"
           onChange={event => {
-            setFiles(
-              Array.from(event.target.files || []).filter(file =>
-                isSupportedLocalAudioName(file.name),
-              ),
-            );
+            updateSelectedFiles(Array.from(event.target.files || []));
           }}
-          className="hidden"
+          className="sr-only"
         />
-      </div>
+      </label>
 
       {files.length > 0 && (
         <div className="max-h-28 overflow-y-auto rounded-lg bg-bg-darkest p-2 text-xs">
@@ -147,6 +176,7 @@ function LocalTab({ onClose }: { onClose: () => void }) {
       )}
 
       {progress && <div className="text-sm text-accent">{progress}</div>}
+      {details.length > 0 && <DebugPanel details={details} title="本地导入诊断" />}
 
       <div className="flex justify-end gap-2">
         <button
@@ -172,28 +202,39 @@ function UrlTab({ onClose }: { onClose: () => void }) {
   const [urls, setUrls] = useState('');
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState('');
+  const [details, setDetails] = useState<string[]>([]);
 
   const handleImport = async () => {
     const lines = urls.split('\n').map(line => line.trim()).filter(Boolean);
     if (lines.length === 0) {
+      setMessage('请先粘贴至少一个音频链接');
+      setDetails([]);
       return;
     }
 
     setImporting(true);
+    setDetails([]);
     const tracks: Track[] = [];
+    const errors: string[] = [];
 
     for (let index = 0; index < lines.length; index += 1) {
       const url = lines[index];
       setMessage(`正在检查 ${index + 1}/${lines.length} ...`);
 
       try {
+        const parsed = new URL(url);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+          throw new Error('仅支持 http 或 https 链接');
+        }
+
         const name = url.split('/').pop()?.split('?')[0] || `Track ${index + 1}`;
         const ext = name.split('.').pop() || 'mp3';
         let duration = 0;
 
         try {
           duration = await getUrlDuration(url);
-        } catch {
+        } catch (error: unknown) {
+          errors.push(`[duration] ${url}: ${formatUnknownError(error)}`);
           duration = 0;
         }
 
@@ -207,19 +248,45 @@ function UrlTab({ onClose }: { onClose: () => void }) {
           index,
           'url',
         ));
-      } catch {
-        // Skip malformed URL.
+      } catch (error: unknown) {
+        errors.push(`[validate] ${url}: ${formatUnknownError(error)}`);
       }
     }
 
-    addTracks(tracks);
-    setMessage(`已导入 ${tracks.length} 个远程音频`);
-    setImporting(false);
+    try {
+      const added = addTracks(tracks);
+      const duplicates = Math.max(0, tracks.length - added);
 
-    window.setTimeout(() => {
-      setMessage('');
-      onClose();
-    }, 1000);
+      if (tracks.length === 0) {
+        setMessage('没有可导入的有效音频链接');
+      } else if (added === 0 && duplicates > 0) {
+        setMessage('这些链接已经都在音乐库中了');
+      } else {
+        const parts = [`已导入 ${added} 个远程音频`];
+        if (duplicates > 0) {
+          parts.push(`跳过 ${duplicates} 个重复链接`);
+        }
+        if (errors.length > 0) {
+          parts.push(`另有 ${errors.length} 条需要排查`);
+        }
+        setMessage(parts.join('，'));
+      }
+
+      setDetails(errors);
+      setImporting(false);
+
+      if (added > 0 && errors.length === 0) {
+        window.setTimeout(() => {
+          setMessage('');
+          setDetails([]);
+          onClose();
+        }, 1000);
+      }
+    } catch (error: unknown) {
+      setImporting(false);
+      setMessage('远程导入失败');
+      setDetails([formatUnknownError(error), ...errors]);
+    }
   };
 
   return (
@@ -235,6 +302,7 @@ function UrlTab({ onClose }: { onClose: () => void }) {
       />
 
       {message && <div className="text-sm text-accent">{message}</div>}
+      {details.length > 0 && <DebugPanel details={details} title="远程导入诊断" />}
 
       <div className="flex justify-end gap-2">
         <button
@@ -261,6 +329,7 @@ function SearchTab({ onClose }: { onClose: () => void }) {
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState('');
+  const [details, setDetails] = useState<string[]>([]);
   const [added, setAdded] = useState<Set<number>>(new Set());
   const [selectedSource, setSelectedSource] = useState('');
 
@@ -275,12 +344,20 @@ function SearchTab({ onClose }: { onClose: () => void }) {
   );
 
   const handleSearch = async () => {
-    if (!query.trim() || !sourceConfig) {
+    if (!query.trim()) {
+      setMessage('请输入搜索关键词');
+      return;
+    }
+
+    if (!sourceConfig) {
+      setMessage('当前没有可用的搜索源');
+      setDetails(['请到设置页启用或配置至少一个搜索源']);
       return;
     }
 
     setSearching(true);
     setMessage(`正在搜索 ${sourceLabel} ...`);
+    setDetails([]);
 
     try {
       const url = sourceConfig.searchUrl.includes('{query}')
@@ -292,7 +369,10 @@ function SearchTab({ onClose }: { onClose: () => void }) {
         headers: sourceConfig.searchHeaders as Record<string, string>,
       });
       const data = await response.json();
-      const items: any[] = resolvePath(data, sourceConfig.resultPath) || [];
+      const items = resolvePath(data, sourceConfig.resultPath);
+      if (!Array.isArray(items)) {
+        throw new Error(`搜索结果路径 ${sourceConfig.resultPath} 未返回数组`);
+      }
 
       const nextResults: SearchResultItem[] = items.map((item: any) => ({
         id: resolvePath(item, sourceConfig.mapping.id),
@@ -307,8 +387,10 @@ function SearchTab({ onClose }: { onClose: () => void }) {
 
       setResults(nextResults);
       setMessage(nextResults.length > 0 ? `找到 ${nextResults.length} 首结果` : '没有找到结果');
-    } catch {
+    } catch (error: unknown) {
+      setResults([]);
       setMessage('搜索失败，请检查网络或搜索源配置');
+      setDetails([formatUnknownError(error)]);
     }
 
     setSearching(false);
@@ -318,10 +400,17 @@ function SearchTab({ onClose }: { onClose: () => void }) {
     const playbackUrl = (sourceConfig?.playbackUrlTemplate || '{id}')
       .replace('{id}', String(song.id));
 
-    addTracks([
+    const addedCount = addTracks([
       makeTrack(song.name, song.artist, song.duration, playbackUrl, 'mp3', 0, song.id, 'url'),
     ]);
-    setAdded(prev => new Set(prev).add(song.id));
+
+    if (addedCount > 0) {
+      setAdded(prev => new Set(prev).add(song.id));
+      setMessage(`已添加 ${song.name}`);
+      setDetails([]);
+    } else {
+      setMessage(`${song.name} 已经在音乐库中了`);
+    }
   };
 
   return (
@@ -369,6 +458,7 @@ function SearchTab({ onClose }: { onClose: () => void }) {
       )}
 
       {message && <div className="text-sm text-accent">{message}</div>}
+      {details.length > 0 && <DebugPanel details={details} title="搜索诊断" />}
 
       <div className="max-h-64 space-y-1 overflow-y-auto">
         {results.map(song => (
@@ -478,11 +568,67 @@ function formatImportSummary(summary: {
 }
 
 function getUrlDuration(url: string): Promise<number> {
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     const audio = new Audio();
     audio.crossOrigin = 'anonymous';
     audio.src = url;
-    audio.onloadedmetadata = () => resolve(audio.duration || 0);
-    audio.onerror = () => resolve(0);
+    const timer = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('读取音频时长超时'));
+    }, 4000);
+
+    const cleanup = () => {
+      window.clearTimeout(timer);
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    };
+
+    audio.onloadedmetadata = () => {
+      const duration = audio.duration || 0;
+      cleanup();
+      resolve(duration);
+    };
+    audio.onerror = () => {
+      cleanup();
+      reject(new Error('浏览器无法读取该音频链接'));
+    };
   });
+}
+
+function DebugPanel({ details, title }: { details: string[]; title: string }) {
+  return (
+    <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-100">
+      <div className="mb-2 font-medium text-yellow-200">{title}</div>
+      <div className="max-h-32 space-y-1 overflow-y-auto">
+        {details.map((detail, index) => (
+          <div key={`${detail}-${index}`}>{detail}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatImportDetail(detail: {
+  source: string;
+  stage: string;
+  message: string;
+}): string {
+  return `[${detail.stage}] ${detail.source}: ${detail.message}`;
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '未知错误';
+  }
 }

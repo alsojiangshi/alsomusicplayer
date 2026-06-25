@@ -21,10 +21,17 @@ const MIME_BY_EXT: Record<string, string> = {
 
 export type LocalImportSource = File | { path: string };
 
+export interface LocalImportError {
+  source: string;
+  stage: 'expand' | 'read' | 'hash' | 'copy' | 'unknown';
+  message: string;
+}
+
 export interface LocalImportResult {
   tracks: Track[];
   skipped: number;
   failed: number;
+  errors: LocalImportError[];
 }
 
 export function isSupportedLocalAudioName(name: string): boolean {
@@ -46,7 +53,8 @@ export async function importLocalSources(params: {
   existingTracks: Track[];
 }): Promise<LocalImportResult> {
   const { sources, storage, existingTracks } = params;
-  const normalizedSources = await expandLocalSources(sources, storage);
+  const expansion = await expandLocalSources(sources, storage);
+  const normalizedSources = expansion.sources;
   const existingHashes = new Set(existingTracks.map(track => track.fileHash).filter(Boolean));
   const existingPaths = new Set(existingTracks.map(track => track.filePath));
   const dataDir = await storage.getDataDir();
@@ -54,10 +62,20 @@ export async function importLocalSources(params: {
   const tracks: Track[] = [];
   let skipped = 0;
   let failed = 0;
+  const errors = [...expansion.errors];
+
+  if (normalizedSources.length === 0 && sources.length > 0 && errors.length === 0) {
+    errors.push({
+      source: sources.map(getLocalSourceDisplayName).join(', '),
+      stage: 'expand',
+      message: '没有发现可导入的音频文件',
+    });
+  }
 
   for (let index = 0; index < normalizedSources.length; index += 1) {
     const source = normalizedSources[index];
     const name = getLocalSourceName(source);
+    const displayName = getLocalSourceDisplayName(source);
 
     if (!isSupportedLocalAudioName(name)) {
       skipped += 1;
@@ -66,7 +84,17 @@ export async function importLocalSources(params: {
 
     try {
       const bytes = await readSourceBytes(source, storage);
-      const fileHash = await computeHashFromBlob(bytes);
+      let fileHash = '';
+
+      try {
+        fileHash = await computeHashFromBlob(bytes);
+      } catch (error: unknown) {
+        errors.push({
+          source: displayName,
+          stage: 'hash',
+          message: `计算文件哈希失败，已继续导入: ${formatImportError(error)}`,
+        });
+      }
 
       if (fileHash && existingHashes.has(fileHash)) {
         skipped += 1;
@@ -80,7 +108,17 @@ export async function importLocalSources(params: {
       const filePath = buildLibraryFilePath(dataDir, name, fileHash || `${Date.now()}-${index}`);
 
       if (!existingPaths.has(filePath) && !(await storage.fileExists(filePath))) {
-        await storage.writeFile(filePath, bytes);
+        try {
+          await storage.writeFile(filePath, bytes);
+        } catch (error: unknown) {
+          failed += 1;
+          errors.push({
+            source: displayName,
+            stage: 'copy',
+            message: `写入应用音乐库失败: ${formatImportError(error)}`,
+          });
+          continue;
+        }
       }
 
       tracks.push({
@@ -107,21 +145,30 @@ export async function importLocalSources(params: {
         existingHashes.add(fileHash);
       }
       existingPaths.add(filePath);
-    } catch {
+    } catch (error: unknown) {
       failed += 1;
+      errors.push({
+        source: displayName,
+        stage: 'unknown',
+        message: formatImportError(error),
+      });
     }
   }
 
-  return { tracks, skipped, failed };
+  return { tracks, skipped, failed, errors };
 }
 
 async function expandLocalSources(
   sources: LocalImportSource[],
   storage: StorageProvider,
-): Promise<LocalImportSource[]> {
+): Promise<{
+  sources: LocalImportSource[];
+  errors: LocalImportError[];
+}> {
   const expanded: LocalImportSource[] = [];
   const seenFiles = new Set<string>();
   const seenPaths = new Set<string>();
+  const errors: LocalImportError[] = [];
 
   const pushPath = (path: string) => {
     const key = path.replace(/\\/g, '/').toLowerCase();
@@ -159,12 +206,16 @@ async function expandLocalSources(
           pushPath(path);
         }
       }
-    } catch {
-      // Ignore unreadable folders and let the summary reflect imported items only.
+    } catch (error: unknown) {
+      errors.push({
+        source: source.path,
+        stage: 'expand',
+        message: `读取目录失败: ${formatImportError(error)}`,
+      });
     }
   }
 
-  return expanded;
+  return { sources: expanded, errors };
 }
 
 async function readSourceBytes(
@@ -172,10 +223,18 @@ async function readSourceBytes(
   storage: StorageProvider,
 ): Promise<Uint8Array> {
   if (source instanceof File) {
-    return new Uint8Array(await source.arrayBuffer());
+    try {
+      return new Uint8Array(await source.arrayBuffer());
+    } catch (error: unknown) {
+      throw new Error(`读取文件内容失败: ${formatImportError(error)}`);
+    }
   }
 
-  return storage.readFile(source.path);
+  try {
+    return await storage.readFile(source.path);
+  } catch (error: unknown) {
+    throw new Error(`读取文件内容失败: ${formatImportError(error)}`);
+  }
 }
 
 function buildLibraryFilePath(dataDir: string, originalName: string, hashSeed: string): string {
@@ -248,5 +307,29 @@ async function readMetadata(
     };
   } catch {
     return fallback;
+  }
+}
+
+function getLocalSourceDisplayName(source: LocalImportSource): string {
+  if (source instanceof File) {
+    return source.name;
+  }
+
+  return source.path;
+}
+
+function formatImportError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '未知错误';
   }
 }

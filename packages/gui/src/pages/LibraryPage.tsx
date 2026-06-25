@@ -4,11 +4,7 @@ import type { Track } from '@core';
 import SearchBar from '../components/SearchBar';
 import SongTable from '../components/SongTable';
 import { usePlayer } from '../stores/playerStore';
-import {
-  getLocalSourceName,
-  isSupportedLocalAudioName,
-  type LocalImportSource,
-} from '../utils/libraryImport';
+import { type LocalImportSource } from '../utils/libraryImport';
 
 interface Props {
   onOpenPlaylistPage: () => void;
@@ -19,6 +15,7 @@ export default function LibraryPage({ onOpenPlaylistPage }: Props) {
   const [query, setQuery] = useState('');
   const [dragOver, setDragOver] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [importDetails, setImportDetails] = useState<string[]>([]);
   const [playlistTarget, setPlaylistTarget] = useState<Track | null>(null);
 
   const filteredTracks = useMemo(() => {
@@ -41,21 +38,37 @@ export default function LibraryPage({ onOpenPlaylistPage }: Props) {
 
   const handleImport = useCallback(async (sources: LocalImportSource[]) => {
     if (sources.length === 0) {
+      showTemporaryMessage('没有检测到可导入的内容');
+      setImportDetails([]);
       return;
     }
 
     setStatusMessage(`正在导入 ${sources.length} 个项目...`);
-    const result = await importLocalItems(sources);
-    const parts = [`导入 ${result.added} 首`];
+    setImportDetails([]);
 
-    if (result.skipped > 0) {
-      parts.push(`跳过 ${result.skipped} 首`);
-    }
-    if (result.failed > 0) {
-      parts.push(`失败 ${result.failed} 首`);
-    }
+    try {
+      const result = await importLocalItems(sources);
+      const parts = [`导入 ${result.added} 首`];
 
-    showTemporaryMessage(parts.join('，'));
+      if (result.skipped > 0) {
+        parts.push(`跳过 ${result.skipped} 首`);
+      }
+      if (result.failed > 0) {
+        parts.push(`失败 ${result.failed} 首`);
+      }
+
+      if (result.added === 0 && result.failed === 0 && result.skipped === 0) {
+        showTemporaryMessage('没有发现可导入的音频文件');
+      } else {
+        showTemporaryMessage(parts.join('，'));
+      }
+
+      setImportDetails(result.errors.map(formatImportDetail));
+    } catch (error: unknown) {
+      const message = formatUnknownError(error);
+      showTemporaryMessage('导入失败');
+      setImportDetails([message]);
+    }
   }, [importLocalItems, showTemporaryMessage]);
 
   useEffect(() => {
@@ -81,9 +94,7 @@ export default function LibraryPage({ onOpenPlaylistPage }: Props) {
 
         if (payload.type === 'drop') {
           setDragOver(false);
-          const sources = payload.paths
-            .map(path => ({ path }))
-            .filter(source => isSupportedLocalAudioName(getLocalSourceName(source)));
+          const sources = payload.paths.map(path => ({ path }));
 
           await handleImport(sources);
         }
@@ -131,11 +142,7 @@ export default function LibraryPage({ onOpenPlaylistPage }: Props) {
       onDrop={event => {
         event.preventDefault();
         setDragOver(false);
-        void handleImport(
-          Array.from(event.dataTransfer.files).filter(file =>
-            isSupportedLocalAudioName(file.name),
-          ),
-        );
+        void handleImport(Array.from(event.dataTransfer.files));
       }}
     >
       {dragOver && (
@@ -150,6 +157,17 @@ export default function LibraryPage({ onOpenPlaylistPage }: Props) {
       {statusMessage && (
         <div className="absolute right-2 top-2 z-20 rounded-lg bg-accent-dim px-4 py-2 text-sm text-accent">
           {statusMessage}
+        </div>
+      )}
+
+      {importDetails.length > 0 && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-100">
+          <div className="mb-2 font-medium text-yellow-200">最近一次导入诊断</div>
+          <div className="max-h-36 space-y-1 overflow-y-auto">
+            {importDetails.map((detail, index) => (
+              <div key={`${detail}-${index}`}>{detail}</div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -238,4 +256,28 @@ export default function LibraryPage({ onOpenPlaylistPage }: Props) {
       )}
     </div>
   );
+}
+
+function formatImportDetail(detail: {
+  source: string;
+  stage: string;
+  message: string;
+}): string {
+  return `[${detail.stage}] ${detail.source}: ${detail.message}`;
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '未知错误';
+  }
 }

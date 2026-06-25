@@ -1,6 +1,6 @@
 /** Tauri HTTP 代理 — 绕过浏览器 CORS */
 
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 interface HttpFetchResult {
   status: number;
@@ -15,7 +15,7 @@ interface HttpFetchOptions {
 }
 
 export async function proxyFetch(url: string, init?: RequestInit): Promise<Response> {
-  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+  if (!isTauri()) {
     return fetch(url, init);
   }
 
@@ -25,10 +25,42 @@ export async function proxyFetch(url: string, init?: RequestInit): Promise<Respo
     body: typeof init?.body === 'string' ? init.body : null,
   };
 
-  const result = await invoke<HttpFetchResult>('http_fetch', { url, options });
+  let result: HttpFetchResult;
+  try {
+    result = await invoke<HttpFetchResult>('http_fetch', { url, options });
+  } catch (error: unknown) {
+    throw new Error(`Tauri 网络代理请求失败 (${url}): ${formatFetchError(error)}`);
+  }
 
-  return new Response(new Uint8Array(result.body), {
+  const response = new Response(new Uint8Array(result.body), {
     status: result.status,
     headers: new Headers(result.headers),
   });
+
+  if (!response.ok) {
+    const bodyPreview = new TextDecoder()
+      .decode(new Uint8Array(result.body).slice(0, 240))
+      .trim();
+    throw new Error(
+      `远程请求返回 HTTP ${response.status}${bodyPreview ? `: ${bodyPreview}` : ''}`,
+    );
+  }
+
+  return response;
+}
+
+function formatFetchError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '未知错误';
+  }
 }

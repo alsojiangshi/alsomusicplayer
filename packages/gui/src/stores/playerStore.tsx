@@ -12,6 +12,7 @@ import { PlaybackMode, PlaybackState, saveConfig, setConfig } from '@core';
 import type { LibraryManager, Database } from '@core';
 import {
   importLocalSources,
+  type LocalImportError,
   type LocalImportResult,
   type LocalImportSource,
 } from '../utils/libraryImport';
@@ -24,6 +25,7 @@ interface ImportSummary {
   added: number;
   skipped: number;
   failed: number;
+  errors: LocalImportError[];
 }
 
 interface PlayerCtx {
@@ -47,7 +49,7 @@ interface PlayerCtx {
   cycleMode: () => void;
   setQueue: (tracks: Track[], startIdx?: number) => void;
   playIndex: (idx: number) => void;
-  addTracks: (tracks: Track[]) => void;
+  addTracks: (tracks: Track[]) => number;
   importLocalItems: (sources: LocalImportSource[]) => Promise<ImportSummary>;
   syncLibraryDirectories: (paths: string[]) => Promise<ImportSummary>;
   hydrateTracks: (tracks: Track[]) => void;
@@ -313,7 +315,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [loadAndPlay]);
 
   const addTracks = useCallback((tracks: Track[]) => {
-    appendTracks(tracks);
+    return appendTracks(tracks);
   }, [appendTracks]);
 
   const importLocalItems = useCallback(async (
@@ -321,7 +323,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   ): Promise<ImportSummary> => {
     const storage = storageRef.current;
     if (!storage) {
-      return { added: 0, skipped: 0, failed: sources.length };
+      return {
+        added: 0,
+        skipped: 0,
+        failed: sources.length,
+        errors: [{
+          source: 'local-import',
+          stage: 'read',
+          message: '存储系统尚未初始化，无法导入本地文件',
+        }],
+      };
     }
 
     const result: LocalImportResult = await importLocalSources({
@@ -335,6 +346,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       added,
       skipped: result.skipped,
       failed: result.failed,
+      errors: result.errors,
     };
   }, [appendTracks]);
 
@@ -345,7 +357,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const trimmedPaths = paths.map(path => path.trim()).filter(Boolean);
 
     if (!storage || trimmedPaths.length === 0) {
-      return { added: 0, skipped: 0, failed: trimmedPaths.length };
+      return {
+        added: 0,
+        skipped: 0,
+        failed: trimmedPaths.length,
+        errors: [{
+          source: 'library-sync',
+          stage: 'read',
+          message: '存储系统尚未初始化，无法同步媒体目录',
+        }],
+      };
     }
 
     const result: LocalImportResult = await importLocalSources({
@@ -359,6 +380,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       added,
       skipped: result.skipped,
       failed: result.failed,
+      errors: result.errors,
     };
   }, [appendTracks]);
 
