@@ -74,20 +74,30 @@ export class Database {
   }
 
   async init(): Promise<void> {
-    const SQL = await initSqlJs(
-      typeof window === 'undefined'
-        ? undefined
-        : {
-            locateFile: (file: string) => (file === 'sql-wasm.wasm' ? '/sql-wasm.wasm' : file),
-          },
-    );
+    let SQL: Awaited<ReturnType<typeof initSqlJs>>;
+    try {
+      SQL = await initSqlJs(
+        typeof window === 'undefined'
+          ? undefined
+          : {
+              locateFile: (file: string) => resolveSqlJsAssetPath(file),
+            },
+      );
+    } catch (error: unknown) {
+      throw new Error(`加载 sql.js 运行时失败: ${formatDatabaseError(error)}`);
+    }
+
     if (this.storage) {
       // 使用 StorageProvider（浏览器/Tauri 环境）
-      if (await this.storage.fileExists(this.dbPath)) {
-        const buf = await this.storage.readFile(this.dbPath);
-        this.db = new SQL.Database(buf);
-      } else {
-        this.db = new SQL.Database();
+      try {
+        if (await this.storage.fileExists(this.dbPath)) {
+          const buf = await this.storage.readFile(this.dbPath);
+          this.db = new SQL.Database(buf);
+        } else {
+          this.db = new SQL.Database();
+        }
+      } catch (error: unknown) {
+        throw new Error(`读取数据库文件失败 (${this.dbPath}): ${formatDatabaseError(error)}`);
       }
     } else {
       // 使用 Bun I/O（CLI 环境）
@@ -157,5 +167,33 @@ export class Database {
       this.db.close();
       this.db = null;
     }
+  }
+}
+
+function resolveSqlJsAssetPath(file: string): string {
+  if (typeof window === 'undefined') {
+    return file;
+  }
+
+  if (file === 'sql-wasm.wasm') {
+    return new URL(file, window.location.href).toString();
+  }
+
+  return file;
+}
+
+function formatDatabaseError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'string') {
+    return error;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return '未知错误';
   }
 }

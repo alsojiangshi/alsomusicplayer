@@ -1,6 +1,6 @@
 /** Tauri HTTP 代理 — 绕过浏览器 CORS */
 
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 
 interface HttpFetchResult {
   status: number;
@@ -15,7 +15,7 @@ interface HttpFetchOptions {
 }
 
 export async function proxyFetch(url: string, init?: RequestInit): Promise<Response> {
-  if (!isTauri()) {
+  if (!hasTauriInvokeBridge()) {
     return fetch(url, init);
   }
 
@@ -47,6 +47,18 @@ export async function proxyFetch(url: string, init?: RequestInit): Promise<Respo
   }
 
   return response;
+}
+
+function hasTauriInvokeBridge(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const tauriInternals = (window as typeof window & {
+    __TAURI_INTERNALS__?: { invoke?: unknown };
+  }).__TAURI_INTERNALS__;
+
+  return typeof tauriInternals?.invoke === 'function';
 }
 
 function formatFetchError(error: unknown): string {

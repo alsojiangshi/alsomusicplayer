@@ -20,6 +20,7 @@ import {
   releaseTrackPlaybackSource,
   resolveTrackPlaybackSource,
 } from '../utils/trackPlayback';
+import { getAppInitError } from '../utils/appInitState';
 
 interface ImportSummary {
   added: number;
@@ -323,6 +324,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   ): Promise<ImportSummary> => {
     const storage = storageRef.current;
     if (!storage) {
+      const initError = getAppInitError();
       return {
         added: 0,
         skipped: 0,
@@ -330,7 +332,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         errors: [{
           source: 'local-import',
           stage: 'read',
-          message: '存储系统尚未初始化，无法导入本地文件',
+          message: initError
+            ? `应用初始化失败，无法导入本地文件: ${initError}`
+            : '存储系统尚未初始化，无法导入本地文件',
         }],
       };
     }
@@ -357,6 +361,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const trimmedPaths = paths.map(path => path.trim()).filter(Boolean);
 
     if (!storage || trimmedPaths.length === 0) {
+      const initError = getAppInitError();
       return {
         added: 0,
         skipped: 0,
@@ -364,7 +369,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         errors: [{
           source: 'library-sync',
           stage: 'read',
-          message: '存储系统尚未初始化，无法同步媒体目录',
+          message: initError
+            ? `应用初始化失败，无法同步媒体目录: ${initError}`
+            : '存储系统尚未初始化，无法同步媒体目录',
         }],
       };
     }
