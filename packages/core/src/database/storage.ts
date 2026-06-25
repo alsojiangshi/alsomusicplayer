@@ -7,4 +7,6 @@ export interface StorageProvider {
   readTextFile(path: string): Promise<string>;
   writeTextFile(path: string, data: string): Promise<void>;
   getDataDir(): Promise<string>;
+  listFilesRecursively?(path: string): Promise<string[]>;
+  deleteFile?(path: string): Promise<void>;
 }

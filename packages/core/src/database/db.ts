@@ -74,7 +74,13 @@ export class Database {
   }
 
   async init(): Promise<void> {
-    const SQL = await initSqlJs();
+    const SQL = await initSqlJs(
+      typeof window === 'undefined'
+        ? undefined
+        : {
+            locateFile: (file: string) => (file === 'sql-wasm.wasm' ? '/sql-wasm.wasm' : file),
+          },
+    );
     if (this.storage) {
       // 使用 StorageProvider（浏览器/Tauri 环境）
       if (await this.storage.fileExists(this.dbPath)) {
@@ -107,7 +113,7 @@ export class Database {
   }
 
   execute(sql: string, params: any[] = []): QueryExecResult[] {
-    return this.ensureDb().exec(sql, { bind: params.map(String) });
+    return this.ensureDb().exec(sql, { bind: params });
   }
 
   run(sql: string, params: any[] = []): void {

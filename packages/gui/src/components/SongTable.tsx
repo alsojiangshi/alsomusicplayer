@@ -1,49 +1,76 @@
-import type { Track } from '@core';
-import { formatDuration } from '@core';
+import type { ReactNode } from 'react';
+import { formatDuration, type Track } from '@core';
 
 interface Props {
   tracks: Track[];
   onPlay?: (track: Track, index: number) => void;
   onDoubleClick?: (track: Track) => void;
   onRemoveFromPlaylist?: (track: Track) => void;
+  renderActions?: (track: Track) => ReactNode;
+  actionHeader?: string;
 }
 
-export default function SongTable({ tracks, onPlay, onDoubleClick, onRemoveFromPlaylist }: Props) {
-  const showActions = !!onRemoveFromPlaylist;
+export default function SongTable({
+  tracks,
+  onPlay,
+  onDoubleClick,
+  onRemoveFromPlaylist,
+  renderActions,
+  actionHeader = '操作',
+}: Props) {
+  const showActions = Boolean(onRemoveFromPlaylist || renderActions);
 
   return (
-    <div className="bg-bg-darkest border border-border rounded-xl overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-border bg-bg-darkest">
       <table className="w-full">
         <thead>
-          <tr className="bg-bg-medium text-text-secondary text-xs font-medium">
-            <th className="py-2 px-3 text-left w-8">#</th>
-            <th className="py-2 px-3 text-left">标题</th>
-            <th className="py-2 px-3 text-left">艺术家</th>
-            <th className="py-2 px-3 text-left">专辑</th>
-            <th className="py-2 px-3 text-right w-16">时长</th>
-            <th className="py-2 px-3 text-center w-14">格式</th>
-            {showActions && <th className="py-2 px-3 text-center w-10"></th>}
+          <tr className="bg-bg-medium text-left text-xs font-medium text-text-secondary">
+            <th className="w-8 px-3 py-2">#</th>
+            <th className="px-3 py-2">标题</th>
+            <th className="px-3 py-2">艺术家</th>
+            <th className="px-3 py-2">专辑</th>
+            <th className="w-16 px-3 py-2 text-right">时长</th>
+            <th className="w-14 px-3 py-2 text-center">格式</th>
+            {showActions && <th className="w-32 px-3 py-2 text-center">{actionHeader}</th>}
           </tr>
         </thead>
         <tbody>
-          {tracks.map((t, i) => (
-            <tr key={t.id}
-              onDoubleClick={() => onDoubleClick?.(t)}
-              onClick={() => onPlay?.(t, i)}
-              className="border-b border-border/50 hover:bg-bg-light cursor-pointer transition-colors even:bg-bg-medium/30">
-              <td className="py-1.5 px-3 text-xs text-text-muted">{i + 1}</td>
-              <td className="py-1.5 px-3 text-sm truncate max-w-[200px]">{t.title}</td>
-              <td className="py-1.5 px-3 text-sm text-text-secondary truncate max-w-[160px]">{t.artist}</td>
-              <td className="py-1.5 px-3 text-sm text-text-secondary truncate max-w-[180px]">{t.album}</td>
-              <td className="py-1.5 px-3 text-xs text-text-muted text-right">{formatDuration(t.duration || 0)}</td>
-              <td className="py-1.5 px-3 text-xs text-text-muted text-center">{t.format}</td>
+          {tracks.map((track, index) => (
+            <tr
+              key={track.id}
+              onDoubleClick={() => onDoubleClick?.(track)}
+              onClick={() => onPlay?.(track, index)}
+              className="cursor-pointer border-b border-border/50 transition-colors even:bg-bg-medium/30 hover:bg-bg-light"
+            >
+              <td className="px-3 py-1.5 text-xs text-text-muted">{index + 1}</td>
+              <td className="max-w-[220px] truncate px-3 py-1.5 text-sm">{track.title}</td>
+              <td className="max-w-[180px] truncate px-3 py-1.5 text-sm text-text-secondary">
+                {track.artist}
+              </td>
+              <td className="max-w-[200px] truncate px-3 py-1.5 text-sm text-text-secondary">
+                {track.album}
+              </td>
+              <td className="px-3 py-1.5 text-right text-xs text-text-muted">
+                {formatDuration(track.duration || 0)}
+              </td>
+              <td className="px-3 py-1.5 text-center text-xs text-text-muted">{track.format}</td>
               {showActions && (
-                <td className="py-1.5 px-1 text-center">
-                  <button
-                    onClick={e => { e.stopPropagation(); onRemoveFromPlaylist?.(t); }}
-                    className="px-1.5 py-0.5 rounded text-xs text-text-muted hover:text-red-400 hover:bg-red-900/30 transition-colors"
-                    title="从播放列表移除"
-                  >✕</button>
+                <td className="px-2 py-1.5 text-center">
+                  <div
+                    className="flex items-center justify-center gap-1"
+                    onClick={event => event.stopPropagation()}
+                  >
+                    {renderActions?.(track)}
+                    {onRemoveFromPlaylist && (
+                      <button
+                        onClick={() => onRemoveFromPlaylist(track)}
+                        className="rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-red-900/30 hover:text-red-300"
+                        title="从播放列表移除"
+                      >
+                        移除
+                      </button>
+                    )}
+                  </div>
                 </td>
               )}
             </tr>

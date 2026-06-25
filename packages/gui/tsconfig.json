@@ -2,8 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src",
-    "jsx": "react-jsx"
+    "rootDir": "..",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@core": ["../core/src/browser.ts"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../core/src/**/*"]
 }

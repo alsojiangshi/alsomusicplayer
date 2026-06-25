@@ -1,134 +1,240 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { usePlayer } from '../stores/playerStore';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getCurrentWebview, type DragDropEvent } from '@tauri-apps/api/webview';
+import type { Track } from '@core';
 import SearchBar from '../components/SearchBar';
 import SongTable from '../components/SongTable';
-import type { Track } from '@core';
-import { invoke } from '@tauri-apps/api/core';
+import { usePlayer } from '../stores/playerStore';
+import {
+  getLocalSourceName,
+  isSupportedLocalAudioName,
+  type LocalImportSource,
+} from '../utils/libraryImport';
 
-const AUDIO_EXT = /\.(mp3|flac|wav|ogg|m4a|aac|opus|wma)$/i;
-
-function getAudioDuration(file: File): Promise<number> {
-  return new Promise((resolve) => {
-    const audio = new Audio();
-    const url = URL.createObjectURL(file);
-    audio.src = url;
-    audio.addEventListener('loadedmetadata', () => { resolve(audio.duration || 0); URL.revokeObjectURL(url); });
-    audio.addEventListener('error', () => { resolve(0); URL.revokeObjectURL(url); });
-  });
+interface Props {
+  onOpenPlaylistPage: () => void;
 }
 
-export default function LibraryPage() {
-  const { allTracks, setQueue, playIndex, addTracks } = usePlayer();
+export default function LibraryPage({ onOpenPlaylistPage }: Props) {
+  const { allTracks, playlists, importLocalItems, addToPlaylist, deleteTrack, setQueue } = usePlayer();
   const [query, setQuery] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [importing, setImporting] = useState('');
-  const libDirRef = useRef('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [playlistTarget, setPlaylistTarget] = useState<Track | null>(null);
 
-  // 获取库目录（缓存）
-  useEffect(() => {
-    (async () => {
-      try {
-        const dataDir: string = await invoke('get_data_dir');
-        libDirRef.current = `${dataDir}/library`;
-      } catch { /* 非 Tauri 环境，回退到 blob URL */ }
-    })();
+  const filteredTracks = useMemo(() => {
+    if (!query.trim()) {
+      return allTracks;
+    }
+
+    const keyword = query.toLowerCase();
+    return allTracks.filter(track =>
+      track.title.toLowerCase().includes(keyword) ||
+      track.artist.toLowerCase().includes(keyword) ||
+      track.album.toLowerCase().includes(keyword),
+    );
+  }, [allTracks, query]);
+
+  const showTemporaryMessage = useCallback((message: string) => {
+    setStatusMessage(message);
+    window.setTimeout(() => setStatusMessage(''), 2500);
   }, []);
 
-  const filtered = query
-    ? allTracks.filter(t =>
-        (t.title || '').toLowerCase().includes(query.toLowerCase()) ||
-        (t.artist || '').toLowerCase().includes(query.toLowerCase()) ||
-        (t.album || '').toLowerCase().includes(query.toLowerCase())
-      )
-    : allTracks;
+  const handleImport = useCallback(async (sources: LocalImportSource[]) => {
+    if (sources.length === 0) {
+      return;
+    }
 
-  const handlePlay = (_track: Track, idx: number) => {
-    setQueue(filtered, idx);
-    playIndex(idx);
-  };
+    setStatusMessage(`正在导入 ${sources.length} 个项目...`);
+    const result = await importLocalItems(sources);
+    const parts = [`导入 ${result.added} 首`];
 
-  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragOver(true); }, []);
-  const handleDragLeave = useCallback((e: React.DragEvent) => { setDragOver(false); }, []);
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const files = Array.from(e.dataTransfer.files).filter(f => AUDIO_EXT.test(f.name));
-    if (files.length === 0) return;
+    if (result.skipped > 0) {
+      parts.push(`跳过 ${result.skipped} 首`);
+    }
+    if (result.failed > 0) {
+      parts.push(`失败 ${result.failed} 首`);
+    }
 
-    setImporting(`正在导入 ${files.length} 个文件...`);
-    const tracks: Track[] = [];
-    const libDir = libDirRef.current;
+    showTemporaryMessage(parts.join('，'));
+  }, [importLocalItems, showTemporaryMessage]);
 
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      try {
-        const duration = await getAudioDuration(f);
-        let filePath = URL.createObjectURL(f); // 回退方案
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
 
-        // 尝试复制到库目录（持久化）
-        if (libDir) {
-          try {
-            const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const buf = await f.arrayBuffer();
-            const dest = `${libDir}/${safeName}`;
-            await invoke('write_file', { path: dest, data: Array.from(new Uint8Array(buf)) });
-            filePath = dest; // 使用持久路径
-          } catch { /* 非 Tauri 环境，保持 blob URL */ }
+    void getCurrentWebview()
+      .onDragDropEvent(async (event: { payload: DragDropEvent }) => {
+        if (disposed) {
+          return;
         }
 
-        tracks.push({
-          id: Date.now() + i,
-          title: f.name.replace(/\.[^.]+$/, ''),
-          artist: 'Unknown Artist', album: 'Unknown Album',
-          duration,
-          filePath,
-          fileHash: '',
-          format: f.name.split('.').pop()?.toUpperCase() || '?',
-          bitrate: 0, sampleRate: 0, channels: 2, fileSize: f.size,
-          coverArt: null,
-          source: 'local' as const, sourceConfig: '',
-          dateAdded: new Date().toISOString(),
-        });
-      } catch { /* skip */ }
+        const payload = event.payload;
+        if (payload.type === 'enter' || payload.type === 'over') {
+          setDragOver(true);
+          return;
+        }
+
+        if (payload.type === 'leave') {
+          setDragOver(false);
+          return;
+        }
+
+        if (payload.type === 'drop') {
+          setDragOver(false);
+          const sources = payload.paths
+            .map(path => ({ path }))
+            .filter(source => isSupportedLocalAudioName(getLocalSourceName(source)));
+
+          await handleImport(sources);
+        }
+      })
+      .then(fn => {
+        unlisten = fn;
+      })
+      .catch(() => {
+        // Browser preview mode falls back to HTML5 drag and drop below.
+      });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [handleImport]);
+
+  const handleDeleteTrack = (track: Track) => {
+    if (!window.confirm(`确定要从音乐库删除“${track.title}”吗？`)) {
+      return;
     }
-    addTracks(tracks);
-    setImporting(`✅ 已导入 ${tracks.length} 首歌曲`);
-    setTimeout(() => setImporting(''), 2000);
-  }, [addTracks]);
+
+    deleteTrack(track.id);
+    showTemporaryMessage(`已删除 ${track.title}`);
+  };
+
+  const handleAddToPlaylist = (playlistId: number) => {
+    if (!playlistTarget) {
+      return;
+    }
+
+    addToPlaylist(playlistId, [playlistTarget.id]);
+    showTemporaryMessage(`已将 ${playlistTarget.title} 添加到播放列表`);
+    setPlaylistTarget(null);
+  };
 
   return (
     <div
-      className="space-y-5 relative"
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      className="relative space-y-5"
+      onDragOver={event => {
+        event.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={event => {
+        event.preventDefault();
+        setDragOver(false);
+        void handleImport(
+          Array.from(event.dataTransfer.files).filter(file =>
+            isSupportedLocalAudioName(file.name),
+          ),
+        );
+      }}
     >
       {dragOver && (
-        <div className="absolute inset-0 z-10 border-2 border-dashed border-accent bg-accent-dim/20 rounded-2xl flex items-center justify-center pointer-events-none">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent bg-accent-dim/20">
           <div className="text-center">
-            <p className="text-4xl mb-2">📥</p>
-            <p className="text-lg text-accent font-bold">松开放入此处</p>
+            <p className="mb-2 text-4xl">📥</p>
+            <p className="text-lg font-bold text-accent">松手即可导入音乐</p>
           </div>
         </div>
       )}
 
-      {importing && (
-        <div className="absolute top-2 right-2 z-20 bg-accent-dim text-accent px-4 py-2 rounded-lg text-sm">{importing}</div>
+      {statusMessage && (
+        <div className="absolute right-2 top-2 z-20 rounded-lg bg-accent-dim px-4 py-2 text-sm text-accent">
+          {statusMessage}
+        </div>
       )}
 
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold">📚 音乐库</h1>
         <SearchBar onSearch={setQuery} />
       </div>
-      <div className="text-sm text-text-muted">共 {filtered.length} 首歌曲</div>
-      {filtered.length === 0 ? (
-        <div className="text-center text-text-muted py-20">
-          <p className="text-4xl mb-3">📁</p>
-          <p className="text-lg mb-2">音乐库为空</p>
-          <p className="text-sm">拖拽音频文件到此处 或 点击左侧「＋ 导入音乐」</p>
+
+      <div className="flex items-center justify-between text-sm text-text-muted">
+        <span>共 {filteredTracks.length} 首歌曲</span>
+        {playlists.length === 0 && filteredTracks.length > 0 && (
+          <span>先创建播放列表，就能把音乐库里的歌曲整理进歌单。</span>
+        )}
+      </div>
+
+      {filteredTracks.length === 0 ? (
+        <div className="py-20 text-center text-text-muted">
+          <p className="mb-3 text-4xl">🎧</p>
+          <p className="mb-2 text-lg">音乐库还是空的</p>
+          <p className="text-sm">直接把音频文件或文件夹拖进窗口，或者点击左侧“导入音乐”。</p>
         </div>
       ) : (
-        <SongTable tracks={filtered} onPlay={handlePlay} />
+        <SongTable
+          tracks={filteredTracks}
+          onPlay={(_track, index) => setQueue(filteredTracks, index)}
+          actionHeader="管理"
+          renderActions={track => (
+            <>
+              <button
+                onClick={() => {
+                  if (playlists.length === 0) {
+                    showTemporaryMessage('请先创建一个播放列表');
+                    window.setTimeout(() => onOpenPlaylistPage(), 200);
+                    return;
+                  }
+                  setPlaylistTarget(track);
+                }}
+                className="rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-bg-light hover:text-text-primary"
+                title="添加到播放列表"
+              >
+                加入歌单
+              </button>
+              <button
+                onClick={() => handleDeleteTrack(track)}
+                className="rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-red-900/30 hover:text-red-300"
+                title="从音乐库删除"
+              >
+                删除
+              </button>
+            </>
+          )}
+        />
+      )}
+
+      {playlistTarget && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50">
+          <div className="w-[380px] space-y-4 rounded-2xl border border-border bg-bg-card p-5 shadow-2xl">
+            <div>
+              <h2 className="text-lg font-bold">添加到播放列表</h2>
+              <p className="mt-1 text-sm text-text-secondary">{playlistTarget.title}</p>
+            </div>
+
+            <div className="max-h-56 space-y-2 overflow-y-auto">
+              {playlists.map(playlist => (
+                <button
+                  key={playlist.id}
+                  onClick={() => handleAddToPlaylist(playlist.id)}
+                  className="flex w-full items-center justify-between rounded-lg border border-border bg-bg-darkest px-3 py-2 text-left text-sm transition-colors hover:border-accent hover:text-accent"
+                >
+                  <span className="truncate">{playlist.name}</span>
+                  <span className="text-xs text-text-muted">{playlist.songCount} 首</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setPlaylistTarget(null)}
+                className="rounded-lg border border-border bg-bg-medium px-3 py-1.5 text-sm"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

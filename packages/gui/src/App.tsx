@@ -1,78 +1,91 @@
-import { useState, useEffect } from 'react';
-import Layout from './components/Layout';
+import { useEffect, useState } from 'react';
+import { Database, LibraryManager, getConfig, loadConfig, setHttpClient } from '@core';
 import ImportModal from './components/ImportModal';
-import { PlayerProvider, usePlayer } from './stores/playerStore';
+import Layout from './components/Layout';
 import LibraryPage from './pages/LibraryPage';
-import PlaylistPage from './pages/PlaylistPage';
 import LyricsPage from './pages/LyricsPage';
+import PlaylistPage from './pages/PlaylistPage';
 import SettingsPage from './pages/SettingsPage';
+import { PlayerProvider, usePlayer } from './stores/playerStore';
 import { TauriStorageProvider } from './stores/tauriStorage';
 import { proxyFetch } from './utils/proxyFetch';
-import { loadConfig, getConfig, setHttpClient } from '@core';
-import { Database } from '@core';
-import { LibraryManager } from '@core';
-
-const PAGES = [LibraryPage, PlaylistPage, LyricsPage, SettingsPage];
 
 function AppInner() {
   const [page, setPage] = useState(0);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
-  const { addTracks, initLibrary } = usePlayer();
-  const Page = PAGES[page];
+  const { applyAudioPreferences, hydrateTracks, initLibrary } = usePlayer();
 
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+
+    void (async () => {
       try {
-        // 1. 创建存储适配器
         const storage = new TauriStorageProvider();
         const dataDir = await storage.getDataDir();
 
-        // 2. 加载配置
-        const configPath = `${dataDir}/config.json`;
-        await loadConfig(configPath, storage);
+        await loadConfig(`${dataDir}/config.json`, storage);
 
-        // 3. 初始化数据库（优先使用用户配置的库路径）
-        const cfg = getConfig();
-        const dbPath = cfg.library?.dbPath || `${dataDir}/music.db`;
+        const config = getConfig();
+        const dbPath = config.library.dbPath || `${dataDir}/music.db`;
         const db = new Database(dbPath, storage);
         await db.init();
 
-        // 4. 创建音乐库管理器
         const library = new LibraryManager(db);
-        initLibrary(library, db);
-
-        // 5. 注入 HTTP 代理（绕过 CORS）
+        initLibrary(library, db, storage);
         setHttpClient(proxyFetch as typeof fetch);
+        applyAudioPreferences(config.audio);
+        hydrateTracks(library.getAllSongs());
 
-        // 6. 加载已有歌曲
-        const songs = library.getAllSongs();
-        if (songs.length > 0) {
-          addTracks(songs);
+        if (mounted) {
+          setReady(true);
         }
-
-        setReady(true);
-      } catch (e: any) {
-        console.error('App init failed:', e);
-        setInitError(e?.message || '初始化失败');
-        // 即使初始化失败也显示 UI（开发模式/浏览器模式）
-        setReady(true);
+      } catch (error: unknown) {
+        console.error('App init failed:', error);
+        if (mounted) {
+          setInitError(error instanceof Error ? error.message : '初始化失败');
+          setReady(true);
+        }
       }
     })();
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [applyAudioPreferences, hydrateTracks, initLibrary]);
+
+  const handleOpenPlaylist = (playlistId: number) => {
+    setSelectedPlaylistId(playlistId);
+    setPage(1);
+  };
+
+  const handleOpenPlaylistPage = () => {
+    setPage(1);
+  };
 
   if (!ready) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100vh', background: '#0d1117', color: '#e6edf3',
-        fontFamily: 'system-ui, sans-serif',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          background: '#0d1117',
+          color: '#e6edf3',
+          fontFamily: 'system-ui, sans-serif',
+        }}
+      >
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🎵</div>
-          <div style={{ fontSize: 18 }}>MusicPlayer 启动中...</div>
-          {initError && <div style={{ color: '#ff6b6b', marginTop: 8, fontSize: 14 }}>{initError}</div>}
+          <div style={{ fontSize: 18 }}>AlsoMusicPlayer 启动中...</div>
+          {initError && (
+            <div style={{ color: '#ff6b6b', marginTop: 8, fontSize: 14 }}>
+              {initError}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -80,10 +93,24 @@ function AppInner() {
 
   return (
     <>
-      <Layout currentPage={page} onNavigate={setPage} onImport={() => setImportOpen(true)}>
-        <Page />
+      <Layout
+        currentPage={page}
+        onNavigate={setPage}
+        onImport={() => setImportOpen(true)}
+        onShowLyrics={() => setPage(2)}
+        onOpenPlaylist={handleOpenPlaylist}
+      >
+        {page === 0 && <LibraryPage onOpenPlaylistPage={handleOpenPlaylistPage} />}
+        {page === 1 && (
+          <PlaylistPage
+            activePlaylistId={selectedPlaylistId}
+            onActivePlaylistChange={setSelectedPlaylistId}
+          />
+        )}
+        {page === 2 && <LyricsPage />}
+        {page === 3 && <SettingsPage />}
       </Layout>
-      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={addTracks} />
+      <ImportModal open={importOpen} onClose={() => setImportOpen(false)} />
     </>
   );
 }

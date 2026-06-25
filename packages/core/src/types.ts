@@ -27,7 +27,7 @@ export interface Track {
   channels: number;
   fileSize: number;
   coverArt: Uint8Array | null;
-  source: 'local' | 's3' | 'openlist';
+  source: 'local' | 'url' | 's3' | 'openlist';
   sourceConfig: string;
   dateAdded: string;
 }

@@ -1,14 +1,37 @@
 /** 配置管理 */
 
-import type { AppConfig, PlaybackMode } from './types.js';
 import type { StorageProvider } from './database/storage.js';
+import type { AppConfig, PlaybackMode } from './types.js';
 
 const DEFAULT_CONFIG: AppConfig = {
-  audio: { volume: 80, muted: false, playbackMode: 'sequential' as PlaybackMode },
-  lyrics: { autoSearch: true, providers: ['lrclib', 'netease'], localPreferred: true },
-  s3: { endpoint: '', accessKey: '', secretKey: '', bucket: '', prefix: '', region: 'us-east-1', useSsl: true },
-  openlist: { serverUrl: '', username: '', password: '' },
-  library: { musicDirs: [], dbPath: '' },
+  audio: {
+    volume: 80,
+    muted: false,
+    playbackMode: 'sequential' as PlaybackMode,
+  },
+  lyrics: {
+    autoSearch: true,
+    providers: ['lrclib', 'netease'],
+    localPreferred: true,
+  },
+  s3: {
+    endpoint: '',
+    accessKey: '',
+    secretKey: '',
+    bucket: '',
+    prefix: '',
+    region: 'us-east-1',
+    useSsl: true,
+  },
+  openlist: {
+    serverUrl: '',
+    username: '',
+    password: '',
+  },
+  library: {
+    musicDirs: [],
+    dbPath: '',
+  },
   search: {
     enabledSources: ['netease'],
     defaultSource: 'netease',
@@ -16,16 +39,25 @@ const DEFAULT_CONFIG: AppConfig = {
       netease: {
         label: '网易云音乐',
         searchUrl: 'https://music.163.com/api/search/get?type=1&limit=20&offset=0',
-        searchHeaders: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://music.163.com/' },
+        searchHeaders: {
+          'User-Agent': 'Mozilla/5.0',
+          Referer: 'https://music.163.com/',
+        },
         resultPath: 'result.songs',
-        mapping: { id: 'id', name: 'name', artist: 'artists[0].name', album: 'al.name', duration: 'dt' },
+        mapping: {
+          id: 'id',
+          name: 'name',
+          artist: 'artists[0].name',
+          album: 'al.name',
+          duration: 'dt',
+        },
         playbackUrlTemplate: 'https://music.163.com/song/media/outer/url?id={id}.mp3',
       },
     },
   },
 };
 
-let _config: AppConfig = { ...DEFAULT_CONFIG };
+let _config: AppConfig = cloneConfig(DEFAULT_CONFIG);
 let _configPath = '';
 
 export function getConfig(): AppConfig {
@@ -35,8 +67,10 @@ export function getConfig(): AppConfig {
 export function setConfig(path: string, value: any): void {
   const keys = path.split('.');
   let target: any = _config;
-  for (let i = 0; i < keys.length - 1; i++) {
-    if (!(keys[i] in target)) target[keys[i]] = {};
+  for (let i = 0; i < keys.length - 1; i += 1) {
+    if (!(keys[i] in target)) {
+      target[keys[i]] = {};
+    }
     target = target[keys[i]];
   }
   target[keys[keys.length - 1]] = value;
@@ -46,7 +80,9 @@ export function getConfigValue<T>(path: string, defaultValue?: T): T {
   const keys = path.split('.');
   let value: any = _config;
   for (const key of keys) {
-    if (value == null || typeof value !== 'object') return defaultValue as T;
+    if (value == null || typeof value !== 'object') {
+      return defaultValue as T;
+    }
     value = value[key];
   }
   return (value !== undefined ? value : defaultValue) as T;
@@ -54,26 +90,29 @@ export function getConfigValue<T>(path: string, defaultValue?: T): T {
 
 export async function loadConfig(configPath: string, storage?: StorageProvider): Promise<void> {
   _configPath = configPath;
+  _config = cloneConfig(DEFAULT_CONFIG);
   try {
     if (storage) {
       if (await storage.fileExists(configPath)) {
         const text = await storage.readTextFile(configPath);
-        _config = deepMerge(DEFAULT_CONFIG, JSON.parse(text));
+        _config = deepMerge(_config, JSON.parse(text));
       }
     } else {
       const file = Bun.file(configPath);
       if (await file.exists()) {
         const data = await file.json();
-        _config = deepMerge(DEFAULT_CONFIG, data);
+        _config = deepMerge(_config, data);
       }
     }
   } catch {
-    _config = { ...DEFAULT_CONFIG };
+    _config = cloneConfig(DEFAULT_CONFIG);
   }
 }
 
 export async function saveConfig(storage?: StorageProvider): Promise<void> {
-  if (!_configPath) return;
+  if (!_configPath) {
+    return;
+  }
   const json = JSON.stringify(_config, null, 2);
   if (storage) {
     await storage.writeTextFile(_configPath, json);
@@ -83,15 +122,34 @@ export async function saveConfig(storage?: StorageProvider): Promise<void> {
 }
 
 function deepMerge(base: any, override: any): any {
-  const result = { ...base };
+  const result = cloneValue(base);
   for (const key of Object.keys(override)) {
-    if (key in result && typeof result[key] === 'object' && typeof override[key] === 'object' && !Array.isArray(override[key])) {
+    if (
+      key in result &&
+      typeof result[key] === 'object' &&
+      typeof override[key] === 'object' &&
+      result[key] !== null &&
+      override[key] !== null &&
+      !Array.isArray(result[key]) &&
+      !Array.isArray(override[key])
+    ) {
       result[key] = deepMerge(result[key], override[key]);
     } else {
-      result[key] = override[key];
+      result[key] = cloneValue(override[key]);
     }
   }
   return result;
+}
+
+function cloneConfig(config: AppConfig): AppConfig {
+  return cloneValue(config);
+}
+
+function cloneValue<T>(value: T): T {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 export function getDataDir(): string {

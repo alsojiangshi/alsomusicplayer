@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LibraryManager } from '../library/manager.js';
 import { extractMetadata, isSupportedAudio } from '../utils/metadata.js';
-import type { OpenListConfig } from '../types.js';
+import type { OpenListConfig, Track } from '../types.js';
 import { BaseImporter } from './base.js';
 import { getDataDir } from '../config.js';
 
@@ -86,12 +86,12 @@ export class OpenListImporter extends BaseImporter {
 
         if (existsSync(localPath)) {
           const meta = await extractMetadata(localPath);
-          if (meta.title) {
+          if (meta.title && meta.filePath) {
             meta.filePath = `openlist://${baseUrl}${f.path}`;
             meta.source = 'openlist';
             meta.fileSize = f.size;
             meta.sourceConfig = JSON.stringify({ serverUrl: baseUrl, remotePath });
-            const id = this.library.addSong(meta);
+            const id = this.library.addSong(meta as Partial<Track> & { filePath: string });
             if (id) imported++;
           }
         }

@@ -1,28 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
-import { usePlayer } from '../stores/playerStore';
+import { useEffect, useRef, useState } from 'react';
+import { LRCParser, LRCLibProvider, LyricsManager, NeteaseProvider, type LyricLine } from '@core';
 import LyricsView from '../components/LyricsView';
-import { LyricsManager, LRCParser, LRCLibProvider, NeteaseProvider } from '@core';
-import type { LyricLine } from '@core';
+import { usePlayer } from '../stores/playerStore';
 
 export default function LyricsPage() {
-  const { currentTrack, libraryManager } = usePlayer();
+  const { currentTrack, libraryManager, cacheLyrics } = usePlayer();
   const [lines, setLines] = useState<LyricLine[]>([]);
   const [loading, setLoading] = useState(false);
-  const [statusMsg, setStatusMsg] = useState('');
-
-  // 初始化 LyricsManager（useEffect 中，不污染 render）
+  const [statusMessage, setStatusMessage] = useState('');
   const lyricsRef = useRef<LyricsManager | null>(null);
+
   useEffect(() => {
     if (libraryManager && !lyricsRef.current) {
-      lyricsRef.current = new LyricsManager(libraryManager);
-      lyricsRef.current.registerProvider('lrclib', new LRCLibProvider());
-      lyricsRef.current.registerProvider('netease', new NeteaseProvider());
+      const manager = new LyricsManager(libraryManager);
+      manager.registerProvider('lrclib', new LRCLibProvider());
+      manager.registerProvider('netease', new NeteaseProvider());
+      lyricsRef.current = manager;
     }
   }, [libraryManager]);
 
   useEffect(() => {
     if (!currentTrack || !libraryManager) {
       setLines([]);
+      setStatusMessage('');
       return;
     }
 
@@ -30,96 +30,101 @@ export default function LyricsPage() {
 
     const loadLyrics = async () => {
       setLoading(true);
-      setStatusMsg('搜索歌词中...');
+      setStatusMessage('正在搜索歌词...');
 
       try {
-        // 1. 查缓存（使用 LyricsManager.getCached — 它正确映射 snake_case → camelCase）
         const cached = lyricsRef.current?.getCached(currentTrack.id);
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         if (cached && (cached.syncedText || cached.plainText)) {
-          const parsed = LRCParser.parse(cached.syncedText || cached.plainText || '');
-          setLines(parsed);
-          setStatusMsg(`来源: ${cached.source}`);
+          setLines(parseLyrics(cached.syncedText || cached.plainText || ''));
+          setStatusMessage(`来源：${cached.source}`);
           setLoading(false);
           return;
         }
 
-        // 2. 在线搜索
-        if (!lyricsRef.current) return;
+        if (!lyricsRef.current) {
+          return;
+        }
+
         const result = await lyricsRef.current.searchOnline(
           currentTrack.title,
           currentTrack.artist,
           currentTrack.album,
-          currentTrack.duration
+          currentTrack.duration,
         );
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         if (result) {
-          const parsed = result.syncedText
-            ? LRCParser.parse(result.syncedText)
-            : result.plainText
-              ? [{ time: 0, text: result.plainText }]
-              : [];
-          setLines(parsed);
-          setStatusMsg(`来源: ${result.source}`);
-
-          // 缓存到数据库
-          libraryManager.cacheLyrics(currentTrack.id, {
+          setLines(parseLyrics(result.syncedText || result.plainText || ''));
+          setStatusMessage(`来源：${result.source}`);
+          cacheLyrics(currentTrack.id, {
             source: result.source,
             plainText: result.plainText,
             syncedText: result.syncedText,
             language: result.language || 'original',
           });
         } else {
-          // 在线搜索失败，保留已有歌词（不清空）
-          setStatusMsg('未找到歌词');
+          setLines([]);
+          setStatusMessage('没有找到歌词');
         }
-      } catch (e: any) {
+      } catch (error: unknown) {
         if (!cancelled) {
-          // 网络错误也保留已有歌词
-          setStatusMsg(`加载失败: ${e?.message || '未知错误'}`);
+          setStatusMessage(
+            error instanceof Error ? `加载失败：${error.message}` : '加载歌词失败',
+          );
         }
       }
-      if (!cancelled) setLoading(false);
+
+      if (!cancelled) {
+        setLoading(false);
+      }
     };
 
-    loadLyrics();
-    return () => { cancelled = true; };
-  }, [currentTrack?.id, libraryManager]);
+    void loadLyrics();
 
-  // 手动重新搜索
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheLyrics, currentTrack?.id, libraryManager]);
+
   const handleSearch = async () => {
-    if (!currentTrack || !libraryManager || !lyricsRef.current) return;
+    if (!currentTrack || !lyricsRef.current) {
+      return;
+    }
+
     setLoading(true);
-    setStatusMsg('重新搜索...');
+    setStatusMessage('重新搜索歌词...');
+
     try {
       const result = await lyricsRef.current.searchOnline(
         currentTrack.title,
         currentTrack.artist,
         currentTrack.album,
-        currentTrack.duration
+        currentTrack.duration,
       );
+
       if (result) {
-        const parsed = result.syncedText
-          ? LRCParser.parse(result.syncedText)
-          : result.plainText
-            ? [{ time: 0, text: result.plainText }]
-            : [];
-        setLines(parsed);
-        setStatusMsg(`来源: ${result.source}`);
-        libraryManager.cacheLyrics(currentTrack.id, {
+        setLines(parseLyrics(result.syncedText || result.plainText || ''));
+        setStatusMessage(`来源：${result.source}`);
+        cacheLyrics(currentTrack.id, {
           source: result.source,
           plainText: result.plainText,
           syncedText: result.syncedText,
           language: result.language || 'original',
         });
       } else {
-        setStatusMsg('未找到歌词');
+        setLines([]);
+        setStatusMessage('没有找到歌词');
       }
     } catch {
-      setStatusMsg('搜索失败，请检查网络');
+      setStatusMessage('搜索失败，请检查网络后重试');
     }
+
     setLoading(false);
   };
 
@@ -127,39 +132,41 @@ export default function LyricsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">🎤 歌词</h1>
-        <div className="flex gap-2">
-          {currentTrack && (
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="px-3 py-1.5 rounded-lg bg-bg-medium border border-border text-sm hover:bg-bg-light disabled:opacity-50"
-            >
-              {loading ? '⏳' : '🔍'} 重新搜索
-            </button>
-          )}
-        </div>
+        {currentTrack && (
+          <button
+            onClick={handleSearch}
+            disabled={loading}
+            className="rounded-lg border border-border bg-bg-medium px-3 py-1.5 text-sm hover:bg-bg-light disabled:opacity-50"
+          >
+            {loading ? '搜索中...' : '重新搜索'}
+          </button>
+        )}
       </div>
 
       {!currentTrack ? (
-        <div className="text-center text-text-muted py-20">
-          <p className="text-lg">播放歌曲后自动搜索歌词</p>
+        <div className="py-20 text-center text-text-muted">
+          <p className="text-lg">开始播放一首歌后，这里会自动加载歌词。</p>
         </div>
       ) : loading ? (
-        <div className="text-center text-text-muted py-20">
-          <p className="text-lg mb-2">🎶 {currentTrack.title}</p>
-          <div className="animate-pulse">{statusMsg}</div>
+        <div className="py-20 text-center text-text-muted">
+          <p className="mb-2 text-lg">🎶 {currentTrack.title}</p>
+          <div className="animate-pulse">{statusMessage}</div>
         </div>
       ) : lines.length > 0 ? (
         <>
-          {statusMsg && <div className="text-xs text-text-muted text-center">{statusMsg}</div>}
+          {statusMessage && <div className="text-center text-xs text-text-muted">{statusMessage}</div>}
           <LyricsView lines={lines} />
         </>
       ) : (
-        <div className="text-center text-text-muted py-20">
-          <p className="text-lg mb-2">🎶 {currentTrack.title}</p>
-          <p className="text-sm">{statusMsg || '暂未获取到歌词，点击上方按钮重新搜索'}</p>
+        <div className="py-20 text-center text-text-muted">
+          <p className="mb-2 text-lg">🎶 {currentTrack.title}</p>
+          <p className="text-sm">{statusMessage || '暂时没有找到歌词。'}</p>
         </div>
       )}
     </div>
   );
+}
+
+function parseLyrics(content: string): LyricLine[] {
+  return LRCParser.parse(content);
 }

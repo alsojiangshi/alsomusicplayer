@@ -1,5 +1,6 @@
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// HTTP 请求选项
 #[derive(Deserialize)]
@@ -55,9 +56,8 @@ fn write_text_file(path: String, data: String) -> Result<(), String> {
 #[tauri::command]
 fn get_data_dir() -> Result<String, String> {
     let base = if cfg!(target_os = "windows") {
-        std::env::var("APPDATA").unwrap_or_else(|_| {
-            std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string())
-        })
+        std::env::var("APPDATA")
+            .unwrap_or_else(|_| std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string()))
     } else {
         std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -67,14 +67,39 @@ fn get_data_dir() -> Result<String, String> {
     Ok(format!("{}/music-player", base))
 }
 
+#[tauri::command]
+fn list_files_recursively(path: String) -> Result<Vec<String>, String> {
+    let root = PathBuf::from(path);
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    collect_files(&root, &mut files).map_err(|e| format!("list_files_recursively: {}", e))?;
+    Ok(files)
+}
+
+#[tauri::command]
+fn delete_file(path: String) -> Result<(), String> {
+    let target = PathBuf::from(path);
+    if !target.exists() {
+        return Ok(());
+    }
+
+    if !target.is_file() {
+        return Err("delete_file: target is not a file".to_string());
+    }
+
+    std::fs::remove_file(&target).map_err(|e| format!("delete_file: {}", e))
+}
+
 // ─── 文件导入 ───────────────────────────────────────────
 
 #[tauri::command]
 fn copy_file_to_library(src: String, filename: String) -> Result<String, String> {
     let base = if cfg!(target_os = "windows") {
-        std::env::var("APPDATA").unwrap_or_else(|_| {
-            std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string())
-        })
+        std::env::var("APPDATA")
+            .unwrap_or_else(|_| std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string()))
     } else {
         std::env::var("XDG_DATA_HOME").unwrap_or_else(|_| {
             let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -86,6 +111,22 @@ fn copy_file_to_library(src: String, filename: String) -> Result<String, String>
     let dest = format!("{}/{}", lib_dir, filename);
     std::fs::copy(&src, &dest).map_err(|e| format!("copy file: {}", e))?;
     Ok(dest)
+}
+
+fn collect_files(path: &Path, files: &mut Vec<String>) -> std::io::Result<()> {
+    if path.is_file() {
+        files.push(path.to_string_lossy().to_string());
+        return Ok(());
+    }
+
+    if path.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            collect_files(&entry.path(), files)?;
+        }
+    }
+
+    Ok(())
 }
 
 // ─── HTTP 代理（绕过浏览器 CORS）────────────────────────
@@ -152,6 +193,8 @@ pub fn run() {
             read_text_file,
             write_text_file,
             get_data_dir,
+            list_files_recursively,
+            delete_file,
             copy_file_to_library,
             http_fetch,
         ])

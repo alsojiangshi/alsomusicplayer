@@ -31,6 +31,14 @@ export class TauriStorageProvider implements StorageProvider {
     if (!this.dataDir) {
       this.dataDir = await invoke('get_data_dir');
     }
-    return this.dataDir;
+    return this.dataDir ?? '';
+  }
+
+  async listFilesRecursively(path: string): Promise<string[]> {
+    return await invoke('list_files_recursively', { path });
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    await invoke('delete_file', { path });
   }
 }

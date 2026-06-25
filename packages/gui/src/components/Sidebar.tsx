@@ -1,44 +1,56 @@
-import { usePlayer } from '../stores/playerStore';
 import { useEffect } from 'react';
+import { usePlayer } from '../stores/playerStore';
 
-const NAV = ['📚 音乐库', '📋 播放列表', '🎤 歌词', '⚙️ 设置'];
+const NAV_ITEMS = ['📚 音乐库', '📋 播放列表', '🎤 歌词', '⚙️ 设置'];
 
-interface Props { currentPage: number; onNavigate: (i: number) => void; onImport: () => void; }
+interface Props {
+  currentPage: number;
+  onNavigate: (index: number) => void;
+  onImport: () => void;
+  onOpenPlaylist: (playlistId: number) => void;
+}
 
-export default function Sidebar({ currentPage, onNavigate, onImport }: Props) {
+export default function Sidebar({
+  currentPage,
+  onNavigate,
+  onImport,
+  onOpenPlaylist,
+}: Props) {
   const { playlists, loadPlaylists } = usePlayer();
 
-  useEffect(() => { loadPlaylists(); }, [loadPlaylists]);
+  useEffect(() => {
+    loadPlaylists();
+  }, [loadPlaylists]);
 
   return (
-    <nav className="w-52 bg-bg-darkest border-r border-border flex flex-col p-3 gap-1">
-      <div className="text-lg font-bold text-accent px-3 py-2 mb-4">🎵 MusicPlayer</div>
-      {NAV.map((label, i) => (
+    <nav className="flex w-52 flex-col gap-1 border-r border-border bg-bg-darkest p-3">
+      <div className="mb-4 px-3 py-2 text-lg font-bold text-accent">🎵 AlsoMusicPlayer</div>
+
+      {NAV_ITEMS.map((label, index) => (
         <button
-          key={i}
-          onClick={() => onNavigate(i)}
-          className={`text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
-            i === currentPage ? 'bg-accent-dim text-accent' : 'text-text-secondary hover:bg-bg-light hover:text-text-primary'
+          key={label}
+          onClick={() => onNavigate(index)}
+          className={`rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+            index === currentPage
+              ? 'bg-accent-dim text-accent'
+              : 'text-text-secondary hover:bg-bg-light hover:text-text-primary'
           }`}
         >
           {label}
         </button>
       ))}
 
-      {/* 播放列表快捷导航 */}
       {playlists.length > 0 && (
         <div className="mt-3">
-          <div className="text-xs text-text-muted px-3 py-1 uppercase tracking-wide">歌单</div>
-          {playlists.map(pl => (
+          <div className="px-3 py-1 text-xs uppercase tracking-wide text-text-muted">歌单</div>
+          {playlists.map(playlist => (
             <button
-              key={pl.id}
-              onClick={() => onNavigate(1)}
-              className={`w-full text-left px-3 py-1.5 rounded-lg text-xs transition-colors truncate ${
-                currentPage === 1 ? 'text-text-secondary hover:bg-bg-light' : 'text-text-muted hover:bg-bg-light hover:text-text-secondary'
-              }`}
+              key={playlist.id}
+              onClick={() => onOpenPlaylist(playlist.id)}
+              className="w-full truncate rounded-lg px-3 py-1.5 text-left text-xs text-text-muted transition-colors hover:bg-bg-light hover:text-text-secondary"
             >
-              {pl.name}
-              <span className="text-text-muted ml-1">({pl.songCount})</span>
+              {playlist.name}
+              <span className="ml-1 text-text-muted">({playlist.songCount})</span>
             </button>
           ))}
         </div>
@@ -47,7 +59,7 @@ export default function Sidebar({ currentPage, onNavigate, onImport }: Props) {
       <div className="mt-auto pt-4">
         <button
           onClick={onImport}
-          className="w-full px-3 py-2 rounded-lg bg-accent-dim text-accent border border-accent/30 hover:bg-accent hover:text-bg-darkest transition-colors text-sm"
+          className="w-full rounded-lg border border-accent/30 bg-accent-dim px-3 py-2 text-sm text-accent transition-colors hover:bg-accent hover:text-bg-darkest"
         >
           ＋ 导入音乐
         </button>

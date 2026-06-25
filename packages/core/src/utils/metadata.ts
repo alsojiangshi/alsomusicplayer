@@ -1,6 +1,5 @@
-/** 音频元数据提取 — 基于 music-metadata */
+/** 音频元数据提取 - 基于 music-metadata */
 
-import { parseFile, type IAudioMetadata } from 'music-metadata';
 import { readFileSync } from 'node:fs';
 import type { Track } from '../types.js';
 import { computeFileHash } from './hash.js';
@@ -23,6 +22,21 @@ export function isSupportedAudio(filePath: string): boolean {
 
 export async function extractMetadata(filePath: string): Promise<Partial<Track>> {
   try {
+    const { parseFile } = (await import('music-metadata') as unknown) as {
+      parseFile: (path: string) => Promise<{
+        common: {
+          title?: string;
+          artist?: string;
+          album?: string;
+        };
+        format: {
+          duration?: number;
+          bitrate?: number;
+          sampleRate?: number;
+          numberOfChannels?: number;
+        };
+      }>;
+    };
     const meta = await parseFile(filePath);
     const ext = filePath.toLowerCase().slice(filePath.lastIndexOf('.'));
     const info = meta.format;

@@ -1,24 +1,42 @@
-import { useState, useEffect, useRef } from 'react';
-import { usePlayer } from '../stores/playerStore';
-import SongTable from '../components/SongTable';
+import { useEffect, useRef, useState } from 'react';
 import type { Track } from '@core';
+import SongTable from '../components/SongTable';
+import { usePlayer } from '../stores/playerStore';
 
-export default function PlaylistPage() {
+interface Props {
+  activePlaylistId: number | null;
+  onActivePlaylistChange: (playlistId: number | null) => void;
+}
+
+export default function PlaylistPage({
+  activePlaylistId,
+  onActivePlaylistChange,
+}: Props) {
   const {
-    libraryManager, playlists,
-    loadPlaylists, createPlaylist, deletePlaylist, renamePlaylist,
-    addToPlaylist, removeFromPlaylist,
-    setQueue, playIndex,
+    libraryManager,
+    playlists,
+    loadPlaylists,
+    createPlaylist,
+    deletePlaylist,
+    renamePlaylist,
+    removeFromPlaylist,
+    setQueue,
   } = usePlayer();
 
-  const [activeId, setActiveId] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<number | null>(activePlaylistId);
   const [songs, setSongs] = useState<Track[]>([]);
   const [newName, setNewName] = useState('');
   const [renaming, setRenaming] = useState<number | null>(null);
   const [renameText, setRenameText] = useState('');
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { loadPlaylists(); }, [loadPlaylists]);
+  useEffect(() => {
+    loadPlaylists();
+  }, [loadPlaylists]);
+
+  useEffect(() => {
+    setActiveId(activePlaylistId);
+  }, [activePlaylistId]);
 
   useEffect(() => {
     if (activeId && libraryManager) {
@@ -29,108 +47,137 @@ export default function PlaylistPage() {
   }, [activeId, libraryManager, playlists]);
 
   useEffect(() => {
-    if (renaming !== null) renameInputRef.current?.focus();
+    if (renaming !== null) {
+      renameInputRef.current?.focus();
+    }
   }, [renaming]);
+
+  const handleSelectPlaylist = (playlistId: number | null) => {
+    setActiveId(playlistId);
+    onActivePlaylistChange(playlistId);
+  };
 
   const handleCreate = () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name) {
+      return;
+    }
+
     const id = createPlaylist(name);
     setNewName('');
-    setActiveId(id);
+    handleSelectPlaylist(id);
   };
 
-  const handleDelete = (id: number) => {
-    deletePlaylist(id);
-    if (activeId === id) setActiveId(null);
-  };
-
-  const handleRename = (id: number) => {
+  const handleRename = (playlistId: number) => {
     const name = renameText.trim();
-    if (!name) { setRenaming(null); return; }
-    renamePlaylist(id, name);
+    if (!name) {
+      setRenaming(null);
+      return;
+    }
+
+    renamePlaylist(playlistId, name);
     setRenaming(null);
   };
 
-  const handleRemove = (track: Track) => {
-    if (!activeId) return;
-    removeFromPlaylist(activeId, [track.id]);
-    setSongs(prev => prev.filter(s => s.id !== track.id));
-  };
-
-  const handlePlayAll = () => {
-    if (songs.length) {
-      setQueue(songs, 0);
-      playIndex(0);
+  const handleDelete = (playlistId: number) => {
+    deletePlaylist(playlistId);
+    if (activeId === playlistId) {
+      handleSelectPlaylist(null);
     }
   };
 
-  const handlePlaySong = (_track: Track, idx: number) => {
-    setQueue(songs, idx);
-    playIndex(idx);
+  const handleRemove = (track: Track) => {
+    if (!activeId) {
+      return;
+    }
+
+    removeFromPlaylist(activeId, [track.id]);
+    setSongs(prev => prev.filter(song => song.id !== track.id));
   };
 
   return (
-    <div className="flex gap-4 h-full">
-      {/* 左侧：播放列表 */}
+    <div className="flex h-full gap-4">
       <div className="w-56 flex-shrink-0 space-y-2">
         <h1 className="text-lg font-bold">📋 播放列表</h1>
 
         <div className="flex gap-1">
           <input
             value={newName}
-            onChange={e => setNewName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCreate()}
+            onChange={event => setNewName(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter') {
+                handleCreate();
+              }
+            }}
             placeholder="新建播放列表..."
-            className="flex-1 bg-bg-darkest border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:border-accent outline-none"
+            className="flex-1 rounded-lg border border-border bg-bg-darkest px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-accent"
           />
           <button
             onClick={handleCreate}
             disabled={!newName.trim()}
-            className="px-2 py-1.5 rounded-lg bg-accent-dim text-accent border border-accent/30 hover:bg-accent hover:text-bg-darkest text-xs disabled:opacity-50"
-          >＋</button>
+            className="rounded-lg border border-accent/30 bg-accent-dim px-2 py-1.5 text-xs text-accent transition-colors hover:bg-accent hover:text-bg-darkest disabled:opacity-50"
+          >
+            添加
+          </button>
         </div>
 
         <div className="space-y-0.5">
           {playlists.length === 0 ? (
-            <div className="text-xs text-text-muted py-4 text-center">暂无播放列表</div>
+            <div className="py-4 text-center text-xs text-text-muted">还没有播放列表</div>
           ) : (
-            playlists.map(pl => (
-              <div key={pl.id}>
-                {renaming === pl.id ? (
+            playlists.map(playlist => (
+              <div key={playlist.id}>
+                {renaming === playlist.id ? (
                   <div className="flex gap-1 px-2 py-1">
                     <input
                       ref={renameInputRef}
                       value={renameText}
-                      onChange={e => setRenameText(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') handleRename(pl.id);
-                        if (e.key === 'Escape') setRenaming(null);
+                      onChange={event => setRenameText(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key === 'Enter') {
+                          handleRename(playlist.id);
+                        }
+                        if (event.key === 'Escape') {
+                          setRenaming(null);
+                        }
                       }}
-                      onBlur={() => handleRename(pl.id)}
-                      className="flex-1 bg-bg-darkest border border-accent rounded px-1.5 py-0.5 text-xs text-text-primary outline-none"
+                      onBlur={() => handleRename(playlist.id)}
+                      className="flex-1 rounded border border-accent bg-bg-darkest px-1.5 py-0.5 text-xs text-text-primary outline-none"
                     />
                   </div>
                 ) : (
                   <div
-                    onClick={() => setActiveId(pl.id)}
-                    className={`flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-xs transition-colors group ${
-                      activeId === pl.id ? 'bg-accent-dim text-accent' : 'text-text-secondary hover:bg-bg-medium'
+                    onClick={() => handleSelectPlaylist(playlist.id)}
+                    className={`group flex cursor-pointer items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                      activeId === playlist.id
+                        ? 'bg-accent-dim text-accent'
+                        : 'text-text-secondary hover:bg-bg-medium'
                     }`}
                   >
-                    <span className="truncate flex-1">{pl.name}</span>
-                    <span className="text-text-muted mr-1">{pl.songCount}</span>
-                    <div className="hidden group-hover:flex gap-0.5">
+                    <span className="flex-1 truncate">{playlist.name}</span>
+                    <span className="mr-1 text-text-muted">{playlist.songCount}</span>
+                    <div className="hidden gap-0.5 group-hover:flex">
                       <button
-                        onClick={e => { e.stopPropagation(); setRenaming(pl.id); setRenameText(pl.name); }}
-                        className="px-1 rounded hover:bg-bg-light text-xs"
+                        onClick={event => {
+                          event.stopPropagation();
+                          setRenaming(playlist.id);
+                          setRenameText(playlist.name);
+                        }}
+                        className="rounded px-1 text-xs hover:bg-bg-light"
                         title="重命名"
-                      >✎</button>
+                      >
+                        编辑
+                      </button>
                       <button
-                        onClick={e => { e.stopPropagation(); handleDelete(pl.id); }}
-                        className="px-1 rounded hover:bg-red-900/50 text-xs"
+                        onClick={event => {
+                          event.stopPropagation();
+                          handleDelete(playlist.id);
+                        }}
+                        className="rounded px-1 text-xs hover:bg-red-900/50"
                         title="删除"
-                      >✕</button>
+                      >
+                        删除
+                      </button>
                     </div>
                   </div>
                 )}
@@ -140,35 +187,30 @@ export default function PlaylistPage() {
         </div>
       </div>
 
-      {/* 右侧：歌曲列表 */}
-      <div className="flex-1 min-w-0 space-y-2">
+      <div className="min-w-0 flex-1 space-y-2">
         {activeId && songs.length > 0 ? (
           <>
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold">
-                {playlists.find(p => p.id === activeId)?.name || ''}
+                {playlists.find(playlist => playlist.id === activeId)?.name || ''}
               </h2>
               <button
-                onClick={handlePlayAll}
-                className="px-3 py-1.5 rounded-lg bg-accent-dim text-accent border border-accent/30 hover:bg-accent hover:text-bg-darkest text-sm"
+                onClick={() => setQueue(songs, 0)}
+                className="rounded-lg border border-accent/30 bg-accent-dim px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent hover:text-bg-darkest"
               >
-                ▶ 播放全部
+                播放全部
               </button>
             </div>
-            <SongTable
-              tracks={songs}
-              onPlay={handlePlaySong}
-              onRemoveFromPlaylist={activeId ? handleRemove : undefined}
-            />
+            <SongTable tracks={songs} onPlay={(_track, index) => setQueue(songs, index)} onRemoveFromPlaylist={handleRemove} />
           </>
         ) : activeId ? (
-          <div className="text-center text-text-muted py-20">
-            <p>播放列表为空</p>
-            <p className="text-xs mt-1">从音乐库中添加歌曲</p>
+          <div className="py-20 text-center text-text-muted">
+            <p>这个播放列表还是空的。</p>
+            <p className="mt-1 text-xs">回到音乐库，把喜欢的歌加进来吧。</p>
           </div>
         ) : (
-          <div className="text-center text-text-muted py-20">
-            <p>选择左侧播放列表查看歌曲</p>
+          <div className="py-20 text-center text-text-muted">
+            <p>从左侧选择一个播放列表来查看歌曲。</p>
           </div>
         )}
       </div>

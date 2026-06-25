@@ -28,3 +28,4 @@ export { loadConfig, saveConfig, getConfig, setConfig, getConfigValue } from './
 export { formatDuration, formatFileSize, safeFilename } from './utils/format.js';
 export { computeHashFromBlob } from './utils/hash-browser.js';
 export { setHttpClient, getHttpClient } from './utils/http.js';
+export type { AudioBackend } from './audio/backend.js';

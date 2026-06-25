@@ -15,6 +15,10 @@ interface HttpFetchOptions {
 }
 
 export async function proxyFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    return fetch(url, init);
+  }
+
   const options: HttpFetchOptions = {
     method: init?.method || 'GET',
     headers: init?.headers as Record<string, string> | undefined,

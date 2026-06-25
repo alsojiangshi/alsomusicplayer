@@ -5,7 +5,7 @@ import { writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LibraryManager } from '../library/manager.js';
 import { extractMetadata, isSupportedAudio } from '../utils/metadata.js';
-import type { S3Config } from '../types.js';
+import type { S3Config, Track } from '../types.js';
 import { BaseImporter } from './base.js';
 import { getDataDir } from '../config.js';
 
@@ -72,7 +72,7 @@ export class S3Importer extends BaseImporter {
           meta.filePath = `s3://${config.bucket}/${obj.key}`;
           meta.source = 's3';
           meta.sourceConfig = JSON.stringify({ endpoint: config.endpoint, bucket: config.bucket });
-          const id = this.library.addSong(meta);
+          const id = this.library.addSong(meta as Partial<Track> & { filePath: string });
           if (id) imported++;
         }
       } catch { /* skip failed */ }

@@ -3,6 +3,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { isAbsolute, resolve as pathResolve } from 'node:path';
 import type { LibraryManager } from '../library/manager.js';
+import type { Track } from '../types.js';
 import { extractMetadata, isSupportedAudio, scanDirectory } from '../utils/metadata.js';
 import { BaseImporter } from './base.js';
 
@@ -34,8 +35,8 @@ export class LocalImporter extends BaseImporter {
       const file = allFiles[i];
       this.report(i + 1, total, file.split('/').pop()!, onProgress);
       const meta = await extractMetadata(file);
-      if (meta.title) {
-        const id = this.library.addSong(meta);
+      if (meta.title && meta.filePath) {
+        const id = this.library.addSong(meta as Partial<Track> & { filePath: string });
         if (id) imported++;
       }
     }
