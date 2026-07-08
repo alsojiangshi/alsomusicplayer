@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "outDir": "./dist",
     "rootDir": "..",
     "jsx": "react-jsx",
@@ -9,5 +10,15 @@
       "@core": ["../core/src/browser.ts"]
     }
   },
-  "include": ["src", "../core/src/**/*"]
+  "include": [
+    "src/main.tsx",
+    "src/app/**/*.ts",
+    "src/app/**/*.tsx",
+    "../core/src/browser.ts",
+    "../core/src/index.ts",
+    "../core/src/types.ts",
+    "../core/src/track.ts",
+    "../core/src/utils/format.ts",
+    "../core/src/lyrics/parser.ts"
+  ]
 }

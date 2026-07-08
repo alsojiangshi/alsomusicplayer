@@ -1,8 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "allowImportingTsExtensions": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "."
   },
-  "include": ["src"]
+  "include": [
+    "src/index.ts",
+    "src/browser.ts",
+    "src/types.ts",
+    "src/track.ts",
+    "src/utils/format.ts",
+    "src/lyrics/parser.ts",
+    "test/*.test.ts"
+  ]
 }

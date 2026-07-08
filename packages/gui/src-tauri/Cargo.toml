@@ -1,18 +1,26 @@
 [package]
-name = "music-player"
-version = "1.0.0"
+name = "also-music-player"
+version = "2.0.0"
 edition = "2021"
 
 [lib]
-name = "music_player_lib"
+name = "also_music_player_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-shell = "2"
+chrono = { version = "0.4", features = ["serde"] }
+idna_adapter = "=1.1.0"
+lofty = "0.21"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+rfd = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+time = "=0.3.36"
+walkdir = "2"

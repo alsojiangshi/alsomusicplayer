@@ -1,189 +1,101 @@
-# 🎵 MusicPlayer
+# AlsoMusicPlayer
 
-跨平台轻量音乐播放器，支持 Linux 与 Windows。
+[English](./README.md) | [简体中文](./README.zh-CN.md)
 
-**TypeScript + Tauri v2 + React 18 + ink** — 工程级代码质量，产物极致轻量。
+AlsoMusicPlayer is a personal music player developed mainly with AI assistance. The earlier version had too many missing or unfinished features, so the project is now being partially rebuilt, and CLI development is planned for a later stage. Overview:
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+- `Tauri v2 + React + TypeScript`
+- local library indexing without copying audio files
+- source-aware tracks: `local_file`, `direct_url`, `resolver`
+- playlists, queue, synced lyrics, desktop lyrics window
+- Windows SMTC support for media keys, media overlay, and lock-screen media cards
+- GitHub CI packaging for Windows and Linux GUI releases
 
-## 架构
+## Architecture
 
-```
+```text
 packages/
-├── core/       @music-player/core   共享引擎（类型 / 数据库 / 歌词 / 导入器）
-├── gui/        @music-player/gui    Tauri v2 + React 18 + Tailwind CSS 桌面端
-└── cli/        @music-player/cli    ink (React for CLI) 终端 TUI
+  core/   shared domain types, track merge helpers, lyric parser, formatters
+  gui/    React desktop UI + Tauri host + native SQLite library backend
 ```
 
+Key design decisions in this rewrite:
+
+- The GUI is the primary deliverable. CLI is intentionally out of the current release path.
+- The Tauri host owns scanning, SQLite persistence, playlist CRUD, lyrics lookup, tray behavior, desktop lyrics window lifecycle, and session storage.
+- The frontend owns presentation and the HTML5 audio playback engine, then syncs playback state back to the host session surface.
+- Local artwork is promoted to a real `artworkRef` path by caching embedded art or nearby cover files into app data when available.
+- Track edits are stored as override records in the app database instead of being written back into local audio tags.
+
+## Source Model
+
+Each track is normalized around these fields:
+
+- `sourceKind`
+- `sourceLocator`
+- `resolverId`
+- `availability`
+- `fingerprint`
+- `artworkRef`
+- `lyricRef`
+
+Merge precedence is:
+
+```text
+user overrides > scanned metadata > fallback values
 ```
-┌──────────────────────────────────────┐
-│         @music-player/core           │
-│  Database · LibraryManager           │
-│  PlaylistEngine · LyricsManager      │
-│  Importers · AudioBackend 接口       │
-└──────────┬──────────────┬───────────┘
-           │              │
-    ┌──────┘              └──────┐
-    ▼                            ▼
-┌──────────────┐         ┌────────────────┐
-│  GUI (Tauri) │         │  CLI (ink)     │
-│  HTML5 Audio │         │  模拟音频后端   │
-│  ~8MB 产物   │         │  ~60MB 产物    │
-└──────────────┘         └────────────────┘
-```
 
-## 产物对比
+## Windows SMTC
 
-| 产物 | 技术 | 体积 |
-|------|------|------|
-| `MusicPlayer-cli-linux` | bun `--compile` | ~60MB |
-| `MusicPlayer-cli-windows.exe` | bun 交叉编译 | ~60MB |
-| `MusicPlayer-gui-linux` | Tauri v2 + AppImage | ~8MB |
-| `MusicPlayer-gui-windows.exe` | Tauri v2 + MSVC | ~10MB |
+Windows builds expose playback to System Media Transport Controls through the app playback session:
 
-CLI 较大是因为打包了 bun 运行时。GUI 极致轻量——Linux 借助 WebKit2GTK 系统库，Windows 利用内置 WebView2。
+- play / pause / previous / next are wired to system media controls
+- playback state and timeline are synchronized from the player session
+- current track metadata and artwork are pushed to the Windows media overlay when available
+- minimizing to tray does not disable SMTC while the player keeps running
 
-## 功能
+Linux builds keep the current desktop-player path and do not add MPRIS in this phase.
 
-- 🎧 **多格式支持** — WAV, OGG, MP3, FLAC, M4A, AAC, OPUS, WMA
-- 🎤 **在线歌词** — LRCLIB.net + 网易云音乐双源搜索与缓存
-- 📁 **多源导入** — 本地文件 / 直链 URL / S3 (MinIO) / OpenList API
-- 🎨 **暗色主题** — Tailwind CSS 自定义 GitHub 风格配色
-- 🔀 **4 种播放模式** — 顺序 / 随机 / 单曲循环 / 列表循环
-- 📋 **播放列表管理** — 收藏、历史记录、队列管理
-- 📦 **6 种便携产物** — CLI / GUI × Linux / Windows，解压即用
+## Development
 
-## 快速开始
+Requirements:
 
-### 环境要求
+- Node.js 22+
+- `pnpm`
+- Rust stable
+- Linux builds additionally need WebKitGTK system libraries
 
-- [bun](https://bun.sh) ≥ 1.3
-- GUI 开发需要 [Rust](https://rustup.rs) + WebKit2GTK 开发库（仅 Linux）
+Install and run:
 
 ```bash
-# 安装 bun
-curl -fsSL https://bun.sh/install | bash
-
-# 克隆并安装依赖
-git clone <repo-url> && cd music-player
-bun install
+pnpm install
+pnpm dev
 ```
 
-### 开发
+Type checking and tests:
 
 ```bash
-bun run dev:cli          # CLI 终端版（ink TUI，端口自动）
-bun run dev:gui          # GUI 桌面版（Vite dev server，端口 1420）
+pnpm typecheck
+pnpm test:core
+cargo test --manifest-path packages/gui/src-tauri/Cargo.toml
 ```
 
-CLI 键盘快捷键：
+## CI Releases
 
-| 键 | 功能 | 键 | 功能 |
-|----|------|----|------|
-| `Space` | 播放/暂停 | `m` | 静音切换 |
-| `n` / `>` | 下一首 | `s` | 随机模式 |
-| `p` / `<` | 上一首 | `r` | 循环切换 |
-| `+` / `=` | 音量增加 | `-` | 音量减少 |
-| `1` | 浏览歌曲库 | `2` | 正在播放 |
-| 直接打字 | 过滤搜索 | `Esc` | 退出 |
+GitHub Actions is GUI-only and currently covers:
 
-### 构建
+- TypeScript type checking
+- shared core tests
+- Rust tests
+- Windows packaging
+- Linux packaging
 
-```bash
-# CLI 二进制（单文件，无外部依赖）
-bun run build:cli:linux
-bun run build:cli:windows
+Tagged releases produce Windows `NSIS` installers plus Linux `AppImage` artifacts.
 
-# GUI 桌面应用
-bun run build:gui            # 仅前端（Vite）
-bun run build:gui:tauri      # 完整桌面应用（需 Rust + 系统库）
-```
+## Local Environment Notes
 
-### Linux GUI 构建前置依赖
+This repository now expects a newer Rust dependency ecosystem than the local `cargo 1.82.0` environment handled cleanly during validation. The TypeScript side was validated successfully in this workspace. Rust dependency resolution here may still be blocked by transitive crates that require newer Cargo manifest support, so CI should continue using current stable Rust.
 
-```bash
-sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-  libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev \
-  libjavascriptcoregtk-4.1-dev patchelf
-```
+## Acknowledgements
 
-## 技术栈
-
-| 层 | 技术 |
-|----|------|
-| 语言 | TypeScript 5.x strict |
-| GUI 框架 | Tauri v2 (Rust 后端) + React 18 |
-| CLI 框架 | ink 7.x (React for terminal) |
-| 样式 | Tailwind CSS 3.x 暗色主题 |
-| 运行时 | bun 1.3+ |
-| 数据库 | sql.js 1.x (SQLite WASM，零原生依赖) |
-| 元数据 | music-metadata 11.x |
-| S3 | @aws-sdk/client-s3 3.x |
-| 状态管理 (GUI) | React Context + useRef |
-| 构建 (CLI) | `bun build --compile` |
-| 构建 (GUI) | Vite + `tauri-apps/tauri-action@v0` (CI) |
-
-## 项目结构
-
-```
-├── packages/
-│   ├── core/src/
-│   │   ├── types.ts              Track、Playlist、LyricsData 等核心类型
-│   │   ├── config.ts             JSON 配置文件读写
-│   │   ├── database/db.ts        sql.js 封装（6 表 schema）
-│   │   ├── library/manager.ts    歌曲/播放列表/收藏/历史 CRUD
-│   │   ├── playlist/engine.ts    队列引擎 + 4 播放模式
-│   │   ├── lyrics/               LRCParser + LyricsManager + 3 个 Provider
-│   │   ├── importers/            Local / S3 / OpenList 导入器
-│   │   ├── audio/                AudioBackend 接口 + TypedEmitter
-│   │   └── utils/                格式化、哈希、元数据提取
-│   │
-│   ├── gui/src/
-│   │   ├── components/           Layout, Sidebar, PlayerBar, SongTable, ImportModal...
-│   │   ├── pages/                Library, Playlist, Lyrics, Settings
-│   │   ├── stores/playerStore    React Context 播放器状态
-│   │   ├── audio/html5-backend   HTML5 AudioElement 后端
-│   │   └── styles/globals.css    Tailwind + 自定义滚动条
-│   │
-│   └── cli/src/
-│       ├── app.tsx               主组件（DB 初始化、键盘处理、界面切换）
-│       ├── audio/backend.ts      模拟音频后端（计时 + mutagen 时长）
-│       ├── components/           Header, StatusBar, ControlBar, SongList
-│       └── screens/              NowPlayingScreen
-│
-├── .github/workflows/build.yml   CI 自动构建 4 产物 + GitHub Release
-├── package.json                  扁平依赖（非 workspace 链接）
-└── tsconfig.base.json            共享 TS strict 配置
-```
-
-## 数据流
-
-```
-ImportModal / 拖拽导入
-  → playerStore.addTracks()
-    → allTracks state
-      → LibraryPage 展示
-      → PlayerBar.setQueue(tracks)
-        → Audio 播放
-```
-
-## CI/CD
-
-推送 `v*` tag 自动触发 `.github/workflows/build.yml`：4 个并行构建 job → 聚合发布到 GitHub Releases。
-
-```bash
-git tag v1.0.0 && git push --tags
-```
-
-## 路线图
-
-- [ ] GUI 歌曲库持久化（接入 sql.js）
-- [ ] 歌词页面与 core 歌词引擎对接
-- [ ] ImportModal 添加 S3 / OpenList Tab
-- [ ] CLI 接入实际音频播放（ffplay / 系统播放器）
-- [ ] 音频文件内嵌封面提取
-- [ ] TypeScript 测试覆盖
-
-## License
-
-MIT © MusicPlayer Contributors
+Thanks to the [Sonorbit](https://github.com/Violexjj/Loop-Sound-Player) project for providing part of the reference and inspiration.

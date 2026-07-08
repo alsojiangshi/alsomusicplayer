@@ -1,37 +1,19 @@
 {
-  "name": "music-player",
+  "name": "also-music-player",
   "private": true,
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "test": "bun test",
-    "dev:cli": "bun run packages/cli/src/main.ts",
-    "build:cli:linux": "bun build --compile --target=bun-linux-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-linux",
-    "build:cli:windows": "bun build --compile --target=bun-windows-x64-modern packages/cli/src/main.ts --outfile dist/MusicPlayer-cli-windows",
-    "dev:gui": "cd packages/gui && bunx --bun vite",
-    "build:gui": "cd packages/gui && bunx --bun vite build",
-    "build:gui:tauri": "cd packages/gui && bunx tauri build"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@tauri-apps/api": "^2.0.0",
-    "@tauri-apps/cli": "^2.0.0",
-    "@tauri-apps/plugin-shell": "^2.0.0",
-    "ink": "^5.0.1",
-    "music-metadata": "^10.3.0",
-    "react": "^18.3.1",
-    "react-devtools-core": "^7.0.1",
-    "react-dom": "^18.3.1",
-    "sql.js": "^1.10.3",
-    "zustand": "^4.5.4"
+    "dev": "pnpm --dir packages/gui dev",
+    "dev:gui": "pnpm --dir packages/gui dev",
+    "build": "pnpm --dir packages/gui build",
+    "build:gui": "pnpm --dir packages/gui build",
+    "build:tauri": "pnpm --dir packages/gui tauri:build",
+    "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/gui/tsconfig.json --noEmit",
+    "test:core": "node --test --experimental-strip-types packages/core/test/*.test.ts",
+    "test:rust": "cargo test --manifest-path packages/gui/src-tauri/Cargo.toml",
+    "test": "pnpm typecheck && pnpm test:core && pnpm test:rust"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.4",
-    "typescript": "^5.5.3",
-    "vite": "^5.3.3"
+    "typescript": "^5.5.3"
   }
 }
