@@ -7,7 +7,7 @@ use db::{
 use lofty::{
     file::{AudioFile, TaggedFileExt},
     probe::Probe,
-    tag::{Accessor, ItemKey, TagExt},
+    tag::{Accessor, ItemKey},
 };
 use regex::Regex;
 use reqwest::Url;
@@ -746,13 +746,13 @@ fn read_local_track(path: &str, app_data_dir: &Path) -> Result<ScannedTrack, Str
         availability: "available".to_string(),
         fingerprint,
         title: tag
-            .and_then(|tag| tag.title().map(ToString::to_string))
+            .and_then(|tag| tag.title().map(|value| value.into_owned()))
             .unwrap_or_else(|| fallback_title(path)),
         artist: tag
-            .and_then(|tag| tag.artist().map(ToString::to_string))
+            .and_then(|tag| tag.artist().map(|value| value.into_owned()))
             .unwrap_or_else(|| "Unknown Artist".to_string()),
         album: tag
-            .and_then(|tag| tag.album().map(ToString::to_string))
+            .and_then(|tag| tag.album().map(|value| value.into_owned()))
             .unwrap_or_else(|| "Unknown Album".to_string()),
         composer: tag
             .and_then(|tag| tag.get_string(&ItemKey::Composer).map(ToString::to_string))
