@@ -4,7 +4,11 @@ use db::{
     AppDatabase, DesktopLyricsSnapshot, LibraryBootstrap, LyricsData, PlaybackSnapshot, Playlist,
     ScanSummary, ScannedTrack, Track, TrackOverrideInput,
 };
-use lofty::{Accessor, AudioFile, ItemKey, Probe, TagExt, TaggedFileExt};
+use lofty::{
+    file::{AudioFile, TaggedFileExt},
+    probe::Probe,
+    tag::{Accessor, ItemKey, TagExt},
+};
 use regex::Regex;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -1100,9 +1104,17 @@ pub fn run() {
             let app_handle = app.handle().clone();
             app.listen("desktopLyrics:request-state", move |_| {
                 if let Some(window) = app_handle.get_webview_window("desktop-lyrics") {
-                    let state = app_handle.state::<AppState>();
-                    if let Ok(snapshot) = state.desktop_snapshot.lock() {
-                        let _ = window.emit("desktopLyrics:state", snapshot.clone());
+                    let snapshot = {
+                        let state = app_handle.state::<AppState>();
+                        state
+                            .desktop_snapshot
+                            .lock()
+                            .map(|snapshot| snapshot.clone())
+                            .ok()
+                    };
+
+                    if let Some(snapshot) = snapshot {
+                        let _ = window.emit("desktopLyrics:state", snapshot);
                     }
                 }
             });
