@@ -46,7 +46,7 @@ dependencies = [
 
 [[package]]
 name = "also-music-player"
-version = "1.4.8"
+version = "1.4.9"
 dependencies = [
  "chrono",
  "idna_adapter",
