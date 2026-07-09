@@ -123,7 +123,11 @@ export function getPlayableSource(locator: string): string {
 }
 
 export function currentWindowLabel(): string {
-  return getCurrentWindow().label;
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return 'main';
+  }
 }
 
 export async function listenEvent<T>(

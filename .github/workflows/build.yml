@@ -95,15 +95,26 @@ jobs:
           $productName = node .github/scripts/release-meta.mjs product-name
           $setupName = "$productName-gui-$artifactVersion-windows-x64-setup.exe"
           $portableName = "$productName-gui-$artifactVersion-windows-x64-portable.zip"
+          $releaseDir = Join-Path $PWD 'packages/gui/src-tauri/target/x86_64-pc-windows-msvc/release'
           $setupSource = Get-ChildItem -Path packages/gui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -File -Filter *.exe | Select-Object -First 1
           Copy-Item -LiteralPath $setupSource.FullName -Destination (Join-Path $PWD "dist/windows/$setupName") -Force
           $portableDir = Join-Path $PWD 'dist/windows/portable'
-          $portableExe = Join-Path $portableDir "$productName.exe"
           $portableZip = Join-Path $PWD "dist/windows/$portableName"
           New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
-          Copy-Item -LiteralPath 'packages/gui/src-tauri/target/x86_64-pc-windows-msvc/release/also-music-player.exe' -Destination $portableExe -Force
+          Copy-Item -LiteralPath (Join-Path $releaseDir 'also-music-player.exe') -Destination (Join-Path $portableDir "$productName.exe") -Force
+          foreach ($pattern in @('*.dll', '*.pak', '*.dat', '*.bin', '*.json')) {
+            Get-ChildItem -Path $releaseDir -File -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+              Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $portableDir $_.Name) -Force
+            }
+          }
+          foreach ($directoryName in @('locales', 'resources')) {
+            $sourceDir = Join-Path $releaseDir $directoryName
+            if (Test-Path $sourceDir) {
+              Copy-Item -LiteralPath $sourceDir -Destination (Join-Path $portableDir $directoryName) -Recurse -Force
+            }
+          }
           if (Test-Path $portableZip) { Remove-Item -LiteralPath $portableZip -Force }
-          Compress-Archive -Path $portableExe -DestinationPath $portableZip -CompressionLevel Optimal
+          Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $portableZip -CompressionLevel Optimal
       - uses: actions/upload-artifact@v4
         with:
           name: gui-windows

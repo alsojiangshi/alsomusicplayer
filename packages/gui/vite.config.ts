@@ -5,6 +5,7 @@ import path from 'node:path';
 export default defineConfig({
   plugins: [react()],
   clearScreen: false,
+  base: './',
   server: {
     port: 1420,
     strictPort: true,
@@ -16,6 +17,8 @@ export default defineConfig({
     },
   },
   build: {
-    target: 'esnext',
+    // Match the WebView baseline Tauri targets on Windows more conservatively
+    // so release builds do not ship syntax newer runtimes fail to parse.
+    target: 'chrome105',
   },
 });
