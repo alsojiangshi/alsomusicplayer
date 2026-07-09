@@ -8,6 +8,7 @@ import type {
   LyricsData,
   PlaybackSnapshot,
   Playlist,
+  UiSettings,
   ResolverSearchResult,
   Track,
   TrackOverrideInput,
@@ -107,6 +108,7 @@ export const commands = {
   loadShortcuts: () => invoke<ShortcutSettings>('shortcuts_load'),
   saveShortcuts: (settings: ShortcutSettings) =>
     invoke<ShortcutCapabilities>('shortcuts_save', { settings }),
+  saveSettings: (settings: UiSettings) => invoke<UiSettings>('settings_save', { settings }),
 };
 
 export function toWebAssetSource(locator: string): string {

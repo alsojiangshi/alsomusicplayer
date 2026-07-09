@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+      - run: node .github/scripts/release-meta.mjs validate
       - name: Install Linux system libraries
         run: |
           sudo apt-get update
@@ -41,6 +42,7 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+      - run: node .github/scripts/release-meta.mjs validate
       - name: Install Linux system libraries
         run: |
           sudo apt-get update
@@ -55,9 +57,13 @@ jobs:
         with:
           projectPath: packages/gui
           args: --target x86_64-unknown-linux-gnu
-      - run: |
+      - name: Normalize Linux artifact names
+        run: |
           mkdir -p dist/linux
-          find packages/gui/src-tauri/target -name '*.AppImage' -o -name '*.deb' | while read f; do cp "$f" dist/linux/; done
+          VERSION="$(node .github/scripts/release-meta.mjs artifact-version)"
+          PRODUCT="$(node .github/scripts/release-meta.mjs product-name)"
+          APPIMAGE="$(find packages/gui/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage -name '*.AppImage' | head -n 1)"
+          cp "$APPIMAGE" "dist/linux/${PRODUCT}-gui-${VERSION}-linux-x64-appimage.AppImage"
       - uses: actions/upload-artifact@v4
         with:
           name: gui-linux
@@ -73,6 +79,7 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+      - run: node .github/scripts/release-meta.mjs validate
       - run: pnpm install --frozen-lockfile=false
       - run: pnpm build
       - uses: tauri-apps/tauri-action@v0
@@ -84,7 +91,19 @@ jobs:
       - shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist/windows | Out-Null
-          Get-ChildItem -Path packages/gui/src-tauri/target -Recurse -Include *.exe,*.msi,*.nsis.zip | Copy-Item -Destination dist/windows -Force
+          $artifactVersion = node .github/scripts/release-meta.mjs artifact-version
+          $productName = node .github/scripts/release-meta.mjs product-name
+          $setupName = "$productName-gui-$artifactVersion-windows-x64-setup.exe"
+          $portableName = "$productName-gui-$artifactVersion-windows-x64-portable.zip"
+          $setupSource = Get-ChildItem -Path packages/gui/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -File -Filter *.exe | Select-Object -First 1
+          Copy-Item -LiteralPath $setupSource.FullName -Destination (Join-Path $PWD "dist/windows/$setupName") -Force
+          $portableDir = Join-Path $PWD 'dist/windows/portable'
+          $portableExe = Join-Path $portableDir "$productName.exe"
+          $portableZip = Join-Path $PWD "dist/windows/$portableName"
+          New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          Copy-Item -LiteralPath 'packages/gui/src-tauri/target/x86_64-pc-windows-msvc/release/also-music-player.exe' -Destination $portableExe -Force
+          if (Test-Path $portableZip) { Remove-Item -LiteralPath $portableZip -Force }
+          Compress-Archive -Path $portableExe -DestinationPath $portableZip -CompressionLevel Optimal
       - uses: actions/upload-artifact@v4
         with:
           name: gui-windows

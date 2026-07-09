@@ -2,59 +2,60 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-AlsoMusicPlayer is a personal music player developed mainly with AI assistance. The earlier version had too many missing or unfinished features, so the project is now being partially rebuilt, and CLI development is planned for a later stage. Overview:
+AlsoMusicPlayer is a desktop-first music player rebuilt around a local library workflow. The current deliverable is GUI-only and focuses on source-aware tracks, playlists, queue management, synced lyrics, desktop lyrics, Windows SMTC, and automated Windows/Linux packaging.
+
+## Overview
 
 - `Tauri v2 + React + TypeScript`
-- local library indexing without copying audio files
 - source-aware tracks: `local_file`, `direct_url`, `resolver`
-- playlists, queue, synced lyrics, desktop lyrics window
-- Windows SMTC support for media keys, media overlay, and lock-screen media cards
-- GitHub CI packaging for Windows and Linux GUI releases
+- local library indexing without copying audio files into app storage
+- playlists, playback queue, synced lyrics, desktop lyrics window
+- Windows SMTC integration for media keys and system media overlay
+- GitHub Actions packaging for Windows and Linux GUI builds
 
 ## Architecture
 
 ```text
 packages/
-  core/   shared domain types, track merge helpers, lyric parser, formatters
-  gui/    React desktop UI + Tauri host + native SQLite library backend
+  core/   shared domain types, playback/session helpers, lyric parser, formatters
+  gui/    React desktop UI + Tauri host + native SQLite backend
 ```
 
-Key design decisions in this rewrite:
+Key design decisions:
 
-- The GUI is the primary deliverable. CLI is intentionally out of the current release path.
-- The Tauri host owns scanning, SQLite persistence, playlist CRUD, lyrics lookup, tray behavior, desktop lyrics window lifecycle, and session storage.
-- The frontend owns presentation and the HTML5 audio playback engine, then syncs playback state back to the host session surface.
-- Local artwork is promoted to a real `artworkRef` path by caching embedded art or nearby cover files into app data when available.
-- Track edits are stored as override records in the app database instead of being written back into local audio tags.
+- The GUI desktop app is the current product target. CLI is intentionally out of scope for this release path.
+- The Tauri host owns scanning, SQLite persistence, tray behavior, desktop lyrics lifecycle, session storage, and source resolution.
+- The frontend owns presentation plus the HTML5 audio engine, then synchronizes playback state back to the host.
+- Manual metadata edits are stored as override records in the app database instead of being written back into local audio tags.
 
-## Source Model
+## Language And Assets
 
-Each track is normalized around these fields:
+The GUI now supports:
 
-- `sourceKind`
-- `sourceLocator`
-- `resolverId`
-- `availability`
-- `fingerprint`
-- `artworkRef`
-- `lyricRef`
+- `English`
+- `简体中文`
+- `Follow system` as the default language strategy
 
-Merge precedence is:
+UI language is persisted in the existing `sessions` storage surface under the `ui_settings` key.
 
-```text
-user overrides > scanned metadata > fallback values
-```
+App and tray art asset paths:
 
-## Windows SMTC
+- `packages/gui/src-tauri/icons/icon.png`
+  - required
+  - transparent PNG
+  - recommended size: `1024x1024`
+- `packages/gui/src-tauri/icons/icon.ico`
+  - required for Windows packaging
+  - multi-size ICO
+  - should include at least `16/24/32/48/64/128/256`
+- `packages/gui/src-tauri/icons/tray-icon.ico`
+  - optional tray-specific Windows icon
+  - recommended multi-size ICO with clear `16/20/24/32`
+- `packages/gui/src-tauri/icons/tray-icon.png`
+  - optional tray-specific Linux icon
+  - recommended transparent PNG, `32x32` or `64x64`
 
-Windows builds expose playback to System Media Transport Controls through the app playback session:
-
-- play / pause / previous / next are wired to system media controls
-- playback state and timeline are synchronized from the player session
-- current track metadata and artwork are pushed to the Windows media overlay when available
-- minimizing to tray does not disable SMTC while the player keeps running
-
-Linux builds keep the current desktop-player path and do not add MPRIS in this phase.
+If tray-specific assets are missing, the app currently falls back to the main application icon.
 
 ## Development
 
@@ -62,8 +63,8 @@ Requirements:
 
 - Node.js 22+
 - `pnpm`
-- Rust stable
-- Linux builds additionally need WebKitGTK system libraries
+- Rust stable used in CI
+- Linux builds additionally require WebKitGTK system libraries
 
 Install and run:
 
@@ -72,7 +73,7 @@ pnpm install
 pnpm dev
 ```
 
-Type checking and tests:
+Checks:
 
 ```bash
 pnpm typecheck
@@ -90,12 +91,18 @@ GitHub Actions is GUI-only and currently covers:
 - Windows packaging
 - Linux packaging
 
-Tagged releases produce Windows `NSIS` installers plus Linux `AppImage` artifacts.
+Tagged releases produce product-style artifacts such as:
+
+- `AlsoMusicPlayer-gui-v1.4.8-windows-x64-setup.exe`
+- `AlsoMusicPlayer-gui-v1.4.8-windows-x64-portable.zip`
+- `AlsoMusicPlayer-gui-v1.4.8-linux-x64-appimage.AppImage`
+
+Non-tag builds use a `dev-<run_number>` suffix.
 
 ## Local Environment Notes
 
-This repository now expects a newer Rust dependency ecosystem than the local `cargo 1.82.0` environment handled cleanly during validation. The TypeScript side was validated successfully in this workspace. Rust dependency resolution here may still be blocked by transitive crates that require newer Cargo manifest support, so CI should continue using current stable Rust.
+This workspace currently validates TypeScript successfully. Local Rust validation may still be blocked on machines using an older Cargo toolchain, because newer transitive crates now expect newer Cargo manifest support than `cargo 1.82.0` provides. CI should remain the source of truth for Rust-side validation if your local toolchain is older.
 
 ## Acknowledgements
 
-Thanks to the [Sonorbit](https://github.com/Violexjj/Loop-Sound-Player) project for providing part of the reference and inspiration.
+Thanks to the [Sonorbit](https://github.com/Violexjj/Loop-Sound-Player) project for part of the inspiration and reference direction.

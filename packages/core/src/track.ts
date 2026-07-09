@@ -94,6 +94,37 @@ export function normalizePlaybackSnapshot(
   };
 }
 
+export function reconcilePlaybackSnapshot(
+  snapshot: Partial<PlaybackSnapshot> | null | undefined,
+  trackIds: Iterable<number>,
+): PlaybackSnapshot {
+  const normalized = normalizePlaybackSnapshot(snapshot);
+  const catalog = new Set(trackIds);
+  const queue = normalized.queue.filter(trackId => catalog.has(trackId));
+
+  if (normalized.currentTrackId === null || !catalog.has(normalized.currentTrackId)) {
+    return {
+      ...normalized,
+      currentTrackId: null,
+      queue,
+      currentIndex: -1,
+      audioState: 'stopped',
+      positionMs: 0,
+      durationMs: 0,
+    };
+  }
+
+  if (!queue.includes(normalized.currentTrackId)) {
+    queue.unshift(normalized.currentTrackId);
+  }
+
+  return {
+    ...normalized,
+    queue,
+    currentIndex: queue.indexOf(normalized.currentTrackId),
+  };
+}
+
 export function sortTracksByTitle(tracks: Track[]): Track[] {
   return [...tracks].sort((left, right) => {
     const byArtist = left.artist.localeCompare(right.artist, 'en');

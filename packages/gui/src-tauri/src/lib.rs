@@ -2,7 +2,7 @@ mod db;
 
 use db::{
     AppDatabase, DesktopLyricsSnapshot, LibraryBootstrap, LyricsData, PlaybackSnapshot, Playlist,
-    ScanSummary, ScannedTrack, Track, TrackOverrideInput,
+    ScanSummary, ScannedTrack, Track, TrackOverrideInput, UiSettings,
 };
 use lofty::{
     file::{AudioFile, TaggedFileExt},
@@ -38,6 +38,7 @@ struct AppState {
     db: Mutex<AppDatabase>,
     desktop_snapshot: Mutex<DesktopLyricsSnapshot>,
     playback_snapshot: Mutex<PlaybackSnapshot>,
+    ui_settings: Mutex<UiSettings>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,6 +108,15 @@ struct ShortcutCapabilities {
     desktop_supported: bool,
 }
 
+struct TrayLabels {
+    show: String,
+    toggle: String,
+    next: String,
+    previous: String,
+    lyrics: String,
+    quit: String,
+}
+
 #[tauri::command]
 fn library_bootstrap(state: tauri::State<'_, AppState>) -> Result<LibraryBootstrap, String> {
     let db = state.db.lock().map_err(|err| err.to_string())?;
@@ -126,7 +136,10 @@ fn library_pick_folders() -> Vec<String> {
 #[tauri::command]
 fn library_pick_files() -> Vec<String> {
     rfd::FileDialog::new()
-        .add_filter("Audio", &["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma"])
+        .add_filter(
+            "Audio",
+            &["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma"],
+        )
         .pick_files()
         .unwrap_or_default()
         .into_iter()
@@ -142,12 +155,16 @@ fn library_scan_paths(
     remember_root: bool,
 ) -> Result<ScanSummary, String> {
     let summary = scan_paths(&app, &state, &paths, remember_root)?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(summary)
 }
 
 #[tauri::command]
-fn library_refresh(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<ScanSummary, String> {
+fn library_refresh(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<ScanSummary, String> {
     let roots = {
         let db = state.db.lock().map_err(|err| err.to_string())?;
         db.list_roots()?
@@ -155,7 +172,8 @@ fn library_refresh(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<
 
     let paths = roots.into_iter().map(|root| root.path).collect::<Vec<_>>();
     let summary = scan_paths(&app, &state, &paths, true)?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(summary)
 }
 
@@ -167,15 +185,13 @@ fn library_remove_track(
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|err| err.to_string())?;
     db.remove_track(track_id)?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-fn library_reveal_track(
-    state: tauri::State<'_, AppState>,
-    track_id: i64,
-) -> Result<(), String> {
+fn library_reveal_track(state: tauri::State<'_, AppState>, track_id: i64) -> Result<(), String> {
     let track = {
         let db = state.db.lock().map_err(|err| err.to_string())?;
         db.get_track(track_id)?
@@ -220,7 +236,8 @@ fn library_add_direct_url(
         db.get_track(track_id)?
     };
 
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(track)
 }
 
@@ -231,7 +248,8 @@ async fn resolver_search_netease(query: String) -> Result<Vec<ResolverSearchResu
         return Ok(Vec::new());
     }
 
-    let mut url = Url::parse("https://music.163.com/api/search/get").map_err(|err| err.to_string())?;
+    let mut url =
+        Url::parse("https://music.163.com/api/search/get").map_err(|err| err.to_string())?;
     url.query_pairs_mut()
         .append_pair("type", "1")
         .append_pair("limit", "20")
@@ -259,9 +277,17 @@ async fn resolver_search_netease(query: String) -> Result<Vec<ResolverSearchResu
     Ok(songs
         .into_iter()
         .map(|item| ResolverSearchResult {
-            id: item.get("id").and_then(|value| value.as_i64()).unwrap_or_default().to_string(),
+            id: item
+                .get("id")
+                .and_then(|value| value.as_i64())
+                .unwrap_or_default()
+                .to_string(),
             resolver_id: "netease".to_string(),
-            title: item.get("name").and_then(|value| value.as_str()).unwrap_or("Unknown").to_string(),
+            title: item
+                .get("name")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Unknown")
+                .to_string(),
             artist: item
                 .get("artists")
                 .and_then(|value| value.as_array())
@@ -276,7 +302,11 @@ async fn resolver_search_netease(query: String) -> Result<Vec<ResolverSearchResu
                 .and_then(|value| value.as_str())
                 .unwrap_or("")
                 .to_string(),
-            duration: item.get("duration").and_then(|value| value.as_f64()).unwrap_or_default() / 1000.0,
+            duration: item
+                .get("duration")
+                .and_then(|value| value.as_f64())
+                .unwrap_or_default()
+                / 1000.0,
         })
         .collect())
 }
@@ -312,7 +342,8 @@ fn resolver_add_track(
         db.get_track(track_id)?
     };
 
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(track)
 }
 
@@ -356,7 +387,8 @@ fn playlist_create(
         let db = state.db.lock().map_err(|err| err.to_string())?;
         db.create_playlist(name.trim())?
     };
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(playlist)
 }
 
@@ -369,7 +401,8 @@ fn playlist_rename(
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|err| err.to_string())?;
     db.rename_playlist(playlist_id, name.trim())?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -381,7 +414,8 @@ fn playlist_delete(
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|err| err.to_string())?;
     db.delete_playlist(playlist_id)?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -403,7 +437,8 @@ fn playlist_add_tracks(
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|err| err.to_string())?;
     db.add_tracks_to_playlist(playlist_id, &track_ids)?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -416,7 +451,8 @@ fn playlist_remove_tracks(
 ) -> Result<(), String> {
     let db = state.db.lock().map_err(|err| err.to_string())?;
     db.remove_tracks_from_playlist(playlist_id, &track_ids)?;
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(())
 }
 
@@ -440,12 +476,16 @@ fn track_override_save(
         db.save_track_override(&input)?;
         db.get_track(input.track_id)?
     };
-    app.emit("library:changed", ()).map_err(|err| err.to_string())?;
+    app.emit("library:changed", ())
+        .map_err(|err| err.to_string())?;
     Ok(track)
 }
 
 #[tauri::command]
-fn lyrics_get(state: tauri::State<'_, AppState>, track_id: i64) -> Result<Option<LyricsData>, String> {
+fn lyrics_get(
+    state: tauri::State<'_, AppState>,
+    track_id: i64,
+) -> Result<Option<LyricsData>, String> {
     let track = {
         let db = state.db.lock().map_err(|err| err.to_string())?;
         let override_data = db.get_track_override(track_id)?;
@@ -536,7 +576,10 @@ fn session_save(
     snapshot: PlaybackSnapshot,
 ) -> Result<(), String> {
     {
-        let mut current = state.playback_snapshot.lock().map_err(|err| err.to_string())?;
+        let mut current = state
+            .playback_snapshot
+            .lock()
+            .map_err(|err| err.to_string())?;
         *current = snapshot.clone();
     }
 
@@ -551,17 +594,27 @@ fn playback_broadcast(
     snapshot: PlaybackSnapshot,
 ) -> Result<(), String> {
     {
-        let mut current = state.playback_snapshot.lock().map_err(|err| err.to_string())?;
+        let mut current = state
+            .playback_snapshot
+            .lock()
+            .map_err(|err| err.to_string())?;
         *current = snapshot.clone();
     }
 
-    app.emit("playback:state", snapshot).map_err(|err| err.to_string())
+    app.emit("playback:state", snapshot)
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
-fn desktop_lyrics_toggle(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<bool, String> {
+fn desktop_lyrics_toggle(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<bool, String> {
     let visible = {
-        let snapshot = state.playback_snapshot.lock().map_err(|err| err.to_string())?;
+        let snapshot = state
+            .playback_snapshot
+            .lock()
+            .map_err(|err| err.to_string())?;
         !snapshot.lyrics_window_visible
     };
     set_desktop_lyrics_visibility(&app, &state, visible)?;
@@ -584,7 +637,10 @@ fn desktop_lyrics_push(
     snapshot: DesktopLyricsSnapshot,
 ) -> Result<(), String> {
     {
-        let mut current = state.desktop_snapshot.lock().map_err(|err| err.to_string())?;
+        let mut current = state
+            .desktop_snapshot
+            .lock()
+            .map_err(|err| err.to_string())?;
         *current = snapshot.clone();
     }
 
@@ -620,6 +676,28 @@ fn shortcuts_save(
         global_supported: false,
         desktop_supported: desktop_lyrics_supported(),
     })
+}
+
+#[tauri::command]
+fn settings_save(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    settings: UiSettings,
+) -> Result<UiSettings, String> {
+    let normalized = normalize_ui_settings(settings);
+
+    {
+        let mut current = state.ui_settings.lock().map_err(|err| err.to_string())?;
+        *current = normalized.clone();
+    }
+
+    {
+        let db = state.db.lock().map_err(|err| err.to_string())?;
+        db.save_session("ui_settings", &normalized)?;
+    }
+
+    refresh_tray_menu(&app, &normalized)?;
+    Ok(normalized)
 }
 
 fn scan_paths(
@@ -705,7 +783,8 @@ fn scan_paths(
         }
     }
 
-    app.emit("scan:done", &summary).map_err(|err| err.to_string())?;
+    app.emit("scan:done", &summary)
+        .map_err(|err| err.to_string())?;
     Ok(summary)
 }
 
@@ -716,7 +795,9 @@ fn read_local_track(path: &str, app_data_dir: &Path) -> Result<ScannedTrack, Str
         .map_err(|err| err.to_string())?;
 
     let properties = tagged_file.properties();
-    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+    let tag = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag());
     let extension = Path::new(path)
         .extension()
         .and_then(|value| value.to_str())
@@ -772,10 +853,9 @@ fn read_local_lyrics(track: &Track) -> Option<LyricsData> {
         return None;
     }
 
-    let lyric_path = track
-        .lyric_ref
-        .clone()
-        .or_else(|| find_local_lrc(&track.source_locator).map(|path| path.to_string_lossy().to_string()))?;
+    let lyric_path = track.lyric_ref.clone().or_else(|| {
+        find_local_lrc(&track.source_locator).map(|path| path.to_string_lossy().to_string())
+    })?;
 
     let content = fs::read_to_string(lyric_path).ok()?;
     Some(lyrics_from_text("local_file", content))
@@ -788,7 +868,11 @@ fn lyrics_from_text(source: &str, content: String) -> LyricsData {
 
     LyricsData {
         source: source.to_string(),
-        plain_text: if is_synced { Some(strip_lrc_tags(&content)) } else { Some(content.clone()) },
+        plain_text: if is_synced {
+            Some(strip_lrc_tags(&content))
+        } else {
+            Some(content.clone())
+        },
         synced_text: if is_synced { Some(content) } else { None },
         language: "original".to_string(),
     }
@@ -850,7 +934,11 @@ fn find_local_artwork<P: AsRef<Path>>(path: P) -> Option<PathBuf> {
     None
 }
 
-fn write_artwork_cache(source_path: &str, bytes: &[u8], artwork_cache_dir: &Path) -> Option<String> {
+fn write_artwork_cache(
+    source_path: &str,
+    bytes: &[u8],
+    artwork_cache_dir: &Path,
+) -> Option<String> {
     if bytes.is_empty() {
         return None;
     }
@@ -964,7 +1052,10 @@ fn set_desktop_lyrics_visibility(
         }
     }
 
-    let mut snapshot = state.playback_snapshot.lock().map_err(|err| err.to_string())?;
+    let mut snapshot = state
+        .playback_snapshot
+        .lock()
+        .map_err(|err| err.to_string())?;
     snapshot.lyrics_window_visible = visible;
     Ok(())
 }
@@ -983,42 +1074,49 @@ fn create_desktop_window(app: &AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(
-        app,
-        "desktop-lyrics",
-        WebviewUrl::App("index.html".into()),
-    )
-    .title("AlsoMusicPlayer Lyrics")
-    .transparent(true)
-    .decorations(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(false)
-    .resizable(true)
-    .inner_size(720.0, 160.0)
-    .build()
-    .map_err(|err| err.to_string())?;
+    WebviewWindowBuilder::new(app, "desktop-lyrics", WebviewUrl::App("index.html".into()))
+        .title("AlsoMusicPlayer Lyrics")
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .resizable(true)
+        .inner_size(720.0, 160.0)
+        .build()
+        .map_err(|err| err.to_string())?;
 
     Ok(())
 }
 
 fn create_tray(app: &AppHandle) -> Result<(), String> {
-    let show = MenuItem::with_id(app, "show", "Show Player", true, None::<&str>)
+    let settings = app
+        .state::<AppState>()
+        .ui_settings
+        .lock()
+        .map_err(|err| err.to_string())?
+        .clone();
+    let labels = tray_labels(&settings);
+
+    let show = MenuItem::with_id(app, "show", labels.show, true, None::<&str>)
         .map_err(|err| err.to_string())?;
-    let toggle = MenuItem::with_id(app, "toggle", "Play / Pause", true, None::<&str>)
+    let toggle = MenuItem::with_id(app, "toggle", labels.toggle, true, None::<&str>)
         .map_err(|err| err.to_string())?;
-    let next = MenuItem::with_id(app, "next", "Next Track", true, None::<&str>)
+    let next = MenuItem::with_id(app, "next", labels.next, true, None::<&str>)
         .map_err(|err| err.to_string())?;
-    let previous = MenuItem::with_id(app, "previous", "Previous Track", true, None::<&str>)
+    let previous = MenuItem::with_id(app, "previous", labels.previous, true, None::<&str>)
         .map_err(|err| err.to_string())?;
-    let lyrics = MenuItem::with_id(app, "lyrics", "Toggle Desktop Lyrics", true, None::<&str>)
+    let lyrics = MenuItem::with_id(app, "lyrics", labels.lyrics, true, None::<&str>)
         .map_err(|err| err.to_string())?;
     let separator = PredefinedMenuItem::separator(app).map_err(|err| err.to_string())?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)
+    let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)
         .map_err(|err| err.to_string())?;
 
-    let menu = Menu::with_items(app, &[&show, &toggle, &previous, &next, &lyrics, &separator, &quit])
-        .map_err(|err| err.to_string())?;
+    let menu = Menu::with_items(
+        app,
+        &[&show, &toggle, &previous, &next, &lyrics, &separator, &quit],
+    )
+    .map_err(|err| err.to_string())?;
 
     TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
@@ -1064,6 +1162,84 @@ fn create_tray(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+fn refresh_tray_menu(app: &AppHandle, settings: &UiSettings) -> Result<(), String> {
+    let labels = tray_labels(settings);
+    let show = MenuItem::with_id(app, "show", labels.show, true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let toggle = MenuItem::with_id(app, "toggle", labels.toggle, true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let next = MenuItem::with_id(app, "next", labels.next, true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let previous = MenuItem::with_id(app, "previous", labels.previous, true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let lyrics = MenuItem::with_id(app, "lyrics", labels.lyrics, true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+    let separator = PredefinedMenuItem::separator(app).map_err(|err| err.to_string())?;
+    let quit = MenuItem::with_id(app, "quit", labels.quit, true, None::<&str>)
+        .map_err(|err| err.to_string())?;
+
+    let menu = Menu::with_items(
+        app,
+        &[&show, &toggle, &previous, &next, &lyrics, &separator, &quit],
+    )
+    .map_err(|err| err.to_string())?;
+
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        tray.set_menu(Some(menu)).map_err(|err| err.to_string())?;
+    }
+
+    Ok(())
+}
+
+fn tray_labels(settings: &UiSettings) -> TrayLabels {
+    match effective_language(settings) {
+        "zh-CN" => TrayLabels {
+            show: "显示播放器".to_string(),
+            toggle: "播放 / 暂停".to_string(),
+            next: "下一首".to_string(),
+            previous: "上一首".to_string(),
+            lyrics: "切换桌面歌词".to_string(),
+            quit: "退出".to_string(),
+        },
+        _ => TrayLabels {
+            show: "Show Player".to_string(),
+            toggle: "Play / Pause".to_string(),
+            next: "Next Track".to_string(),
+            previous: "Previous Track".to_string(),
+            lyrics: "Toggle Desktop Lyrics".to_string(),
+            quit: "Quit".to_string(),
+        },
+    }
+}
+
+fn normalize_ui_settings(settings: UiSettings) -> UiSettings {
+    let language_preference = match settings.language_preference.as_str() {
+        "en-US" | "zh-CN" | "system" => settings.language_preference,
+        _ => "system".to_string(),
+    };
+
+    let resolved_language = match settings.resolved_language.as_str() {
+        "zh-CN" => "zh-CN".to_string(),
+        "en-US" => "en-US".to_string(),
+        _ if language_preference == "zh-CN" => "zh-CN".to_string(),
+        _ => "en-US".to_string(),
+    };
+
+    UiSettings {
+        language_preference,
+        resolved_language,
+    }
+}
+
+fn effective_language(settings: &UiSettings) -> &'static str {
+    match settings.language_preference.as_str() {
+        "zh-CN" => "zh-CN",
+        "en-US" => "en-US",
+        _ if settings.resolved_language == "zh-CN" => "zh-CN",
+        _ => "en-US",
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1080,12 +1256,16 @@ pub fn run() {
             let desktop_snapshot = database
                 .load_session::<DesktopLyricsSnapshot>("desktop_lyrics_snapshot")?
                 .unwrap_or_default();
+            let ui_settings = database
+                .load_session::<UiSettings>("ui_settings")?
+                .unwrap_or_default();
 
             app.manage(AppState {
                 app_data_dir: app_data_dir.clone(),
                 db: Mutex::new(database),
                 desktop_snapshot: Mutex::new(desktop_snapshot),
                 playback_snapshot: Mutex::new(playback_snapshot),
+                ui_settings: Mutex::new(ui_settings),
             });
 
             create_desktop_window(app.handle())?;
@@ -1151,7 +1331,8 @@ pub fn run() {
             desktop_lyrics_push,
             player_transport,
             shortcuts_load,
-            shortcuts_save
+            shortcuts_save,
+            settings_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running AlsoMusicPlayer");

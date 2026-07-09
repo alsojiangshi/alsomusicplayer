@@ -8,6 +8,9 @@ import {
   hasTrackOverrides,
   mergeTrackRecord,
   normalizePlaybackSnapshot,
+  normalizeUiSettings,
+  reconcilePlaybackSnapshot,
+  resolveUiLanguage,
 } from '../src/index.ts';
 
 test('mergeTrackRecord prefers overrides over scanned values', () => {
@@ -61,4 +64,52 @@ test('helpers expose expected fallback behavior', () => {
   assert.equal(fallbackTrackTitle('https://cdn.example.com/demo-track.mp3'), 'demo-track');
   assert.equal(hasTrackOverrides({ trackId: 9, composer: 'Joe' }), true);
   assert.equal(hasTrackOverrides({ trackId: 9 }), false);
+});
+
+test('resolveUiLanguage follows system language with zh fallback', () => {
+  assert.equal(resolveUiLanguage('system', ['zh-CN', 'en-US']), 'zh-CN');
+  assert.equal(resolveUiLanguage('system', ['ja-JP']), 'en-US');
+  assert.equal(resolveUiLanguage('en-US', ['zh-CN']), 'en-US');
+});
+
+test('normalizeUiSettings applies defaults and preserves explicit language', () => {
+  assert.deepEqual(normalizeUiSettings(null, ['zh-CN']), {
+    languagePreference: 'system',
+    resolvedLanguage: 'zh-CN',
+  });
+  assert.deepEqual(normalizeUiSettings({ languagePreference: 'en-US' }, ['zh-CN']), {
+    languagePreference: 'en-US',
+    resolvedLanguage: 'en-US',
+  });
+});
+
+test('reconcilePlaybackSnapshot stops when current track disappears', () => {
+  const reconciled = reconcilePlaybackSnapshot(
+    {
+      currentTrackId: 2,
+      queue: [1, 2, 3],
+      currentIndex: 1,
+      audioState: 'playing',
+      positionMs: 32000,
+      durationMs: 180000,
+      volume: 90,
+      muted: false,
+      mode: PlaybackMode.Sequential,
+      lyricsWindowVisible: true,
+    },
+    [1, 3],
+  );
+
+  assert.deepEqual(reconciled, {
+    currentTrackId: null,
+    queue: [1, 3],
+    currentIndex: -1,
+    audioState: 'stopped',
+    positionMs: 0,
+    durationMs: 0,
+    volume: 90,
+    muted: false,
+    mode: PlaybackMode.Sequential,
+    lyricsWindowVisible: true,
+  });
 });

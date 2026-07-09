@@ -1,6 +1,6 @@
 {
   "name": "@music-player/gui",
-  "version": "2.0.0",
+  "version": "1.4.8",
   "private": true,
   "type": "module",
   "scripts": {

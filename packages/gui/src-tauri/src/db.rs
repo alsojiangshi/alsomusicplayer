@@ -79,6 +79,22 @@ impl Default for PlaybackSnapshot {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct UiSettings {
+    pub language_preference: String,
+    pub resolved_language: String,
+}
+
+impl Default for UiSettings {
+    fn default() -> Self {
+        Self {
+            language_preference: "system".to_string(),
+            resolved_language: "en-US".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopLyricsSnapshot {
@@ -97,6 +113,7 @@ pub struct LibraryBootstrap {
     pub roots: Vec<LibraryRoot>,
     pub session: PlaybackSnapshot,
     pub desktop_lyrics_supported: bool,
+    pub ui_settings: UiSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,6 +278,9 @@ impl AppDatabase {
                 .load_session::<PlaybackSnapshot>("playback_session")?
                 .unwrap_or_default(),
             desktop_lyrics_supported,
+            ui_settings: self
+                .load_session::<UiSettings>("ui_settings")?
+                .unwrap_or_default(),
         })
     }
 
@@ -604,7 +624,11 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn add_tracks_to_playlist(&self, playlist_id: i64, track_ids: &[i64]) -> Result<(), String> {
+    pub fn add_tracks_to_playlist(
+        &self,
+        playlist_id: i64,
+        track_ids: &[i64],
+    ) -> Result<(), String> {
         let mut next_position = self
             .conn
             .query_row(
@@ -633,7 +657,11 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn remove_tracks_from_playlist(&self, playlist_id: i64, track_ids: &[i64]) -> Result<(), String> {
+    pub fn remove_tracks_from_playlist(
+        &self,
+        playlist_id: i64,
+        track_ids: &[i64],
+    ) -> Result<(), String> {
         for track_id in track_ids {
             self.conn
                 .execute(

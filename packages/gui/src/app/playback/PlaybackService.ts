@@ -1,4 +1,4 @@
-import type { PlaybackMode, PlaybackState, PlaybackSnapshot, Track } from '@core';
+import { reconcilePlaybackSnapshot, type PlaybackMode, type PlaybackState, type PlaybackSnapshot, type Track } from '@core';
 import { commands, getPlayableSource, toWebAssetSource, type TransportAction } from '../tauri';
 import { useAppStore } from '../store';
 
@@ -69,6 +69,7 @@ class PlaybackService {
 
   setCatalog(tracks: Track[]) {
     this.trackIndex = new Map(tracks.map(track => [track.id, track]));
+    this.reconcileWithCatalog();
     this.syncMediaSession();
   }
 
@@ -105,10 +106,7 @@ class PlaybackService {
     if (nextTrackId !== null) {
       await this.loadTrack(nextTrackId, autoplay);
     } else {
-      this.pendingSeekMs = null;
-      this.audio.pause();
-      this.audio.removeAttribute('src');
-      this.audio.load();
+      this.resetAudioElement();
     }
     this.syncPlayback();
   }
@@ -283,6 +281,36 @@ class PlaybackService {
     }, 120);
   }
 
+  private reconcileWithCatalog() {
+    const state = useAppStore.getState();
+    const current = state.playback;
+    const reconciled = reconcilePlaybackSnapshot(current, this.trackIndex.keys());
+
+    if (!playbackSnapshotChanged(current, reconciled)) {
+      return;
+    }
+
+    const removedCurrentTrack = current.currentTrackId !== null && reconciled.currentTrackId === null;
+    if (removedCurrentTrack) {
+      this.resetAudioElement();
+    }
+
+    state.applyPlaybackPatch(reconciled);
+    this.syncPlayback();
+  }
+
+  private resetAudioElement() {
+    this.pendingSeekMs = null;
+    try {
+      this.audio.currentTime = 0;
+    } catch {
+      // Ignore state reset failures on an unloaded element.
+    }
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+  }
+
   private initializeMediaSession() {
     const mediaSession = getMediaSession();
     if (!mediaSession) {
@@ -415,4 +443,18 @@ function detectArtworkMimeType(locator: string): string | undefined {
 
 function stateForAutoplay(autoplay: boolean): PlaybackState {
   return autoplay ? ('buffering' as PlaybackState) : ('paused' as PlaybackState);
+}
+
+function playbackSnapshotChanged(left: PlaybackSnapshot, right: PlaybackSnapshot): boolean {
+  return left.currentTrackId !== right.currentTrackId
+    || left.currentIndex !== right.currentIndex
+    || left.audioState !== right.audioState
+    || left.positionMs !== right.positionMs
+    || left.durationMs !== right.durationMs
+    || left.volume !== right.volume
+    || left.muted !== right.muted
+    || left.mode !== right.mode
+    || left.lyricsWindowVisible !== right.lyricsWindowVisible
+    || left.queue.length !== right.queue.length
+    || left.queue.some((trackId, index) => trackId !== right.queue[index]);
 }

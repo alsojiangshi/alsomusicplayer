@@ -1,6 +1,7 @@
 [package]
 name = "also-music-player"
-version = "2.0.0"
+# Crate metadata only. The packaged app version is resolved from ../package.json via tauri.conf.json.
+version = "1.4.8"
 edition = "2021"
 
 [lib]

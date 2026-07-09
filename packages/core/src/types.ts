@@ -2,6 +2,15 @@ export type SourceKind = 'local_file' | 'direct_url' | 'resolver';
 
 export type TrackAvailability = 'available' | 'missing' | 'unresolved';
 
+export type UiLanguagePreference = 'system' | 'en-US' | 'zh-CN';
+
+export type ResolvedUiLanguage = 'en-US' | 'zh-CN';
+
+export interface UiSettings {
+  languagePreference: UiLanguagePreference;
+  resolvedLanguage: ResolvedUiLanguage;
+}
+
 export const PlaybackState = {
   Stopped: 'stopped',
   Playing: 'playing',
@@ -125,6 +134,7 @@ export interface LibraryBootstrap {
   roots: LibraryRoot[];
   session: PlaybackSnapshot;
   desktopLyricsSupported: boolean;
+  uiSettings: UiSettings;
 }
 
 export interface TrackDraft {

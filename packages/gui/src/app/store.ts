@@ -10,7 +10,9 @@ import type {
   ResolverSearchResult,
   Track,
   TrackOverrideInput,
+  UiSettings,
 } from '@core';
+import { normalizeUiSettings } from '@core';
 import { commands, type ScanSummary, type ShortcutSettings } from './tauri';
 
 export type ViewId = 'library' | 'playlists' | 'queue' | 'lyrics' | 'settings';
@@ -39,6 +41,7 @@ interface AppStore {
   playlistTracks: Record<number, Track[]>;
   desktopLyricsSupported: boolean;
   shortcuts: ShortcutSettings | null;
+  uiSettings: UiSettings;
   statusMessage: string | null;
   statusTone: 'info' | 'error';
   scanSummary: ScanSummary | null;
@@ -76,6 +79,8 @@ interface AppStore {
   resetQueueFromSession: (session: PlaybackSnapshot) => void;
   saveOverride: (input: TrackOverrideInput) => Promise<Track>;
   setShortcutSettings: (settings: ShortcutSettings) => void;
+  saveUiSettings: (settings: UiSettings) => Promise<void>;
+  setUiSettings: (settings: UiSettings) => void;
 }
 
 const initialPlayback: PlaybackViewState = {
@@ -102,6 +107,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   playlistTracks: {},
   desktopLyricsSupported: false,
   shortcuts: null,
+  uiSettings: normalizeUiSettings(),
   statusMessage: null,
   statusTone: 'info',
   scanSummary: null,
@@ -131,6 +137,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         desktopLyricsSupported: bootstrap.desktopLyricsSupported,
         restoredSession: bootstrap.session,
         shortcuts,
+        uiSettings: normalizeUiSettings(bootstrap.uiSettings),
         playback: {
           ...initialPlayback,
           currentTrackId: bootstrap.session.currentTrackId,
@@ -161,6 +168,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       playlists: bootstrap.playlists,
       roots: bootstrap.roots,
       desktopLyricsSupported: bootstrap.desktopLyricsSupported,
+      uiSettings: normalizeUiSettings(bootstrap.uiSettings),
       playlistTracks: Object.fromEntries(
         Object.entries(state.playlistTracks).filter(([playlistId]) =>
           bootstrap.playlists.some(playlist => playlist.id === Number(playlistId)),
@@ -324,6 +332,15 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setShortcutSettings(settings) {
     set({ shortcuts: settings });
+  },
+
+  async saveUiSettings(settings) {
+    const saved = await commands.saveSettings(settings);
+    set({ uiSettings: normalizeUiSettings(saved) });
+  },
+
+  setUiSettings(settings) {
+    set({ uiSettings: normalizeUiSettings(settings) });
   },
 }));
 

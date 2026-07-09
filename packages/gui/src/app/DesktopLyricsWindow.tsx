@@ -1,17 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DesktopLyricsSnapshot } from '@core';
+import { buildStrings } from './i18n';
 import { commands, listenEvent } from './tauri';
 
-const INITIAL_STATE: DesktopLyricsSnapshot = {
-  title: 'AlsoMusicPlayer',
-  artist: 'Desktop Lyrics',
-  currentLine: 'Play a track to start desktop lyrics.',
-  nextLine: 'You can control playback from this floating window.',
-  isPlaying: false,
-};
+function buildInitialState(): DesktopLyricsSnapshot {
+  const language = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('zh')
+    ? 'zh-CN'
+    : 'en-US';
+  const strings = buildStrings(language);
+  return {
+    title: strings.common.appName,
+    artist: strings.desktopWindow.defaultArtist,
+    currentLine: strings.desktopWindow.defaultCurrentLine,
+    nextLine: strings.desktopWindow.defaultNextLine,
+    isPlaying: false,
+  };
+}
 
 export default function DesktopLyricsWindow() {
-  const [snapshot, setSnapshot] = useState<DesktopLyricsSnapshot>(INITIAL_STATE);
+  const initialState = useMemo(() => buildInitialState(), []);
+  const [snapshot, setSnapshot] = useState<DesktopLyricsSnapshot>(initialState);
 
   useEffect(() => {
     let cleanup = () => {};
@@ -31,8 +39,8 @@ export default function DesktopLyricsWindow() {
     <div className="desktop-lyrics-window">
       <div className="desktop-lyrics-shell">
         <div className="muted tiny">
-          <div>{snapshot.title || 'AlsoMusicPlayer'}</div>
-          <div>{snapshot.artist || 'Desktop Lyrics'}</div>
+          <div>{snapshot.title || initialState.title}</div>
+          <div>{snapshot.artist || initialState.artist}</div>
         </div>
 
         <div className="desktop-lyrics-lines">
@@ -42,13 +50,13 @@ export default function DesktopLyricsWindow() {
 
         <div className="desktop-lyrics-actions">
           <button className="icon-button" onClick={() => void commands.transport('previous')}>
-            ◀
+            {'<<'}
           </button>
           <button className="icon-button" onClick={() => void commands.transport('toggle')}>
-            {snapshot.isPlaying ? '❚❚' : '▶'}
+            {snapshot.isPlaying ? '||' : '>'}
           </button>
           <button className="icon-button" onClick={() => void commands.transport('next')}>
-            ▶
+            {'>>'}
           </button>
         </div>
       </div>
