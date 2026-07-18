@@ -25,6 +25,9 @@ class PlaybackService {
     this.audio.addEventListener('timeupdate', () => {
       useAppStore.getState().applyPlaybackPatch({
         positionMs: Math.floor(this.audio.currentTime * 1000),
+        ...(!this.audio.paused && !this.audio.ended
+          ? { audioState: 'playing' as PlaybackState }
+          : {}),
       });
       this.syncPlayback();
     });
@@ -43,12 +46,17 @@ class PlaybackService {
       });
       this.syncPlayback();
     });
-    this.audio.addEventListener('play', () => {
-      useAppStore.getState().applyPlaybackPatch({
-        audioState: 'playing' as PlaybackState,
-      });
-      this.syncPlayback();
-    });
+    const markPlaying = () => {
+      if (!this.audio.paused && !this.audio.ended) {
+        useAppStore.getState().applyPlaybackPatch({
+          audioState: 'playing' as PlaybackState,
+        });
+        this.syncPlayback();
+      }
+    };
+    this.audio.addEventListener('play', markPlaying);
+    this.audio.addEventListener('playing', markPlaying);
+    this.audio.addEventListener('canplay', markPlaying);
     this.audio.addEventListener('pause', () => {
       useAppStore.getState().applyPlaybackPatch({
         audioState:
@@ -57,13 +65,18 @@ class PlaybackService {
       this.syncPlayback();
     });
     this.audio.addEventListener('waiting', () => {
-      useAppStore.getState().applyPlaybackPatch({
-        audioState: 'buffering' as PlaybackState,
-      });
-      this.syncPlayback();
+      if (!this.audio.paused) {
+        useAppStore.getState().applyPlaybackPatch({
+          audioState: 'buffering' as PlaybackState,
+        });
+        this.syncPlayback();
+      }
     });
     this.audio.addEventListener('ended', () => {
       void this.next();
+    });
+    this.audio.addEventListener('error', () => {
+      this.reportPlaybackFailure(this.audio.error?.message);
     });
   }
 
@@ -92,6 +105,7 @@ class PlaybackService {
   }
 
   async setQueue(trackIds: number[], startIndex = 0, autoplay = true) {
+    this.initialize();
     const boundedIndex = trackIds.length === 0 ? -1 : Math.max(0, Math.min(startIndex, trackIds.length - 1));
     const nextTrackId = boundedIndex >= 0 ? trackIds[boundedIndex] ?? null : null;
     useAppStore.getState().applyPlaybackPatch({
@@ -118,6 +132,75 @@ class PlaybackService {
     await this.setQueue(nextQueue, index >= 0 ? index : 0, true);
   }
 
+  async replaceQueue(trackIds: number[]) {
+    this.initialize();
+    const nextQueue = Array.from(new Set(trackIds)).filter(trackId => this.trackIndex.has(trackId));
+    const playback = useAppStore.getState().playback;
+    const currentIndex = playback.currentTrackId === null
+      ? -1
+      : nextQueue.indexOf(playback.currentTrackId);
+
+    if (currentIndex >= 0) {
+      useAppStore.getState().applyPlaybackPatch({
+        queue: nextQueue,
+        currentIndex,
+      });
+      this.syncPlayback();
+      return;
+    }
+
+    const keepPlaying = !this.audio.paused && !this.audio.ended;
+    await this.setQueue(nextQueue, 0, keepPlaying);
+  }
+
+  moveQueueItem(fromIndex: number, toIndex: number) {
+    const playback = useAppStore.getState().playback;
+    if (
+      fromIndex < 0
+      || fromIndex >= playback.queue.length
+      || toIndex < 0
+      || toIndex >= playback.queue.length
+      || fromIndex === toIndex
+    ) {
+      return;
+    }
+
+    const queue = [...playback.queue];
+    const [trackId] = queue.splice(fromIndex, 1);
+    queue.splice(toIndex, 0, trackId);
+    useAppStore.getState().applyPlaybackPatch({
+      queue,
+      currentIndex: playback.currentTrackId === null
+        ? -1
+        : queue.indexOf(playback.currentTrackId),
+    });
+    this.syncPlayback();
+  }
+
+  async removeQueueItem(index: number) {
+    const playback = useAppStore.getState().playback;
+    if (index < 0 || index >= playback.queue.length) {
+      return;
+    }
+
+    const removedTrackId = playback.queue[index];
+    const queue = playback.queue.filter((_, itemIndex) => itemIndex !== index);
+    if (removedTrackId !== playback.currentTrackId) {
+      useAppStore.getState().applyPlaybackPatch({
+        queue,
+        currentIndex: playback.currentTrackId === null
+          ? -1
+          : queue.indexOf(playback.currentTrackId),
+      });
+      this.syncPlayback();
+      return;
+    }
+
+    const nextIndex = queue.length === 0 ? -1 : Math.min(index, queue.length - 1);
+    const keepPlaying = !this.audio.paused && !this.audio.ended;
+    await this.setQueue(queue, nextIndex, keepPlaying);
+  }
+
   async toggle() {
     this.initialize();
     if (!this.audio.src && useAppStore.getState().playback.currentTrackId) {
@@ -126,7 +209,7 @@ class PlaybackService {
     }
 
     if (this.audio.paused) {
-      await this.audio.play().catch(() => undefined);
+      await this.startPlayback();
     } else {
       this.audio.pause();
     }
@@ -219,6 +302,12 @@ class PlaybackService {
     this.syncPlayback();
   }
 
+  async toggleDesktopLyricsLock() {
+    const locked = await commands.toggleDesktopLyricsLock();
+    useAppStore.getState().applyPlaybackPatch({ desktopLyricsLocked: locked });
+    this.syncPlayback();
+  }
+
   async handleTransport(action: TransportAction | string) {
     switch (action) {
       case 'toggle':
@@ -233,27 +322,64 @@ class PlaybackService {
       case 'toggle-desktop-lyrics':
         await this.toggleDesktopLyrics();
         break;
+      case 'toggle-desktop-lyrics-lock':
+        await this.toggleDesktopLyricsLock();
+        break;
       default:
         break;
     }
   }
 
   private async loadTrack(trackId: number, autoplay: boolean, initialPositionMs = 0) {
-    const source = await commands.resolvePlaybackSource(trackId);
-    this.pendingSeekMs = initialPositionMs > 0 ? initialPositionMs : null;
-    this.audio.src = getPlayableSource(source);
-    this.audio.currentTime = 0;
-    useAppStore.getState().applyPlaybackPatch({
-      currentTrackId: trackId,
-      positionMs: initialPositionMs,
-      durationMs: 0,
-      audioState: stateForAutoplay(autoplay),
-    });
-    this.syncMediaSession();
+    try {
+      const source = await commands.resolvePlaybackSource(trackId);
+      this.pendingSeekMs = initialPositionMs > 0 ? initialPositionMs : null;
+      this.audio.src = getPlayableSource(source);
+      this.audio.currentTime = 0;
+      useAppStore.getState().applyPlaybackPatch({
+        currentTrackId: trackId,
+        positionMs: initialPositionMs,
+        durationMs: 0,
+        audioState: stateForAutoplay(autoplay),
+      });
+      this.syncMediaSession();
 
-    if (autoplay) {
-      await this.audio.play().catch(() => undefined);
+      if (autoplay) {
+        await this.startPlayback();
+      }
+    } catch (error) {
+      this.reportPlaybackFailure(error);
     }
+  }
+
+  private async startPlayback() {
+    try {
+      await this.audio.play();
+      if (!this.audio.paused && !this.audio.ended) {
+        useAppStore.getState().applyPlaybackPatch({
+          audioState: 'playing' as PlaybackState,
+        });
+        this.syncPlayback();
+      }
+    } catch (error) {
+      this.reportPlaybackFailure(error);
+    }
+  }
+
+  private reportPlaybackFailure(error?: unknown) {
+    const store = useAppStore.getState();
+    const detail = playbackErrorDetail(error);
+    const isChinese = store.uiSettings.resolvedLanguage === 'zh-CN';
+    const message = isChinese
+      ? `无法播放此曲目${detail ? `：${detail}` : '。'}`
+      : `Unable to play this track${detail ? `: ${detail}` : '.'}`;
+
+    store.applyPlaybackPatch({
+      audioState: 'stopped' as PlaybackState,
+      durationMs: 0,
+    });
+    store.setStatus(message, 'error');
+    this.syncPlayback();
   }
 
   private syncPlayback() {
@@ -274,6 +400,7 @@ class PlaybackService {
         positionMs: playback.positionMs,
         durationMs: playback.durationMs,
         lyricsWindowVisible: playback.lyricsWindowVisible,
+        desktopLyricsLocked: playback.desktopLyricsLocked,
       };
       void commands.saveSession(snapshot);
       void commands.broadcastPlayback(snapshot);
@@ -455,6 +582,17 @@ function playbackSnapshotChanged(left: PlaybackSnapshot, right: PlaybackSnapshot
     || left.muted !== right.muted
     || left.mode !== right.mode
     || left.lyricsWindowVisible !== right.lyricsWindowVisible
+    || left.desktopLyricsLocked !== right.desktopLyricsLocked
     || left.queue.length !== right.queue.length
     || left.queue.some((trackId, index) => trackId !== right.queue[index]);
+}
+
+function playbackErrorDetail(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return '';
 }

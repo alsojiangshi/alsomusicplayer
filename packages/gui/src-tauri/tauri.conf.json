@@ -16,12 +16,16 @@
         "title": "AlsoMusicPlayer",
         "width": 1380,
         "height": 920,
-        "minWidth": 960,
-        "minHeight": 680
+        "minWidth": 720,
+        "minHeight": 600
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {

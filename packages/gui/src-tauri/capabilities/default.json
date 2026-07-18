@@ -1,7 +1,11 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicepage/nicepage/refs/heads/main/schema.json",
+  "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities",
-  "windows": ["main"],
-  "permissions": ["core:default", "shell:allow-open"]
+  "windows": ["main", "desktop-lyrics"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "shell:allow-open"
+  ]
 }

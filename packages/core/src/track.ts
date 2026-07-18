@@ -91,6 +91,7 @@ export function normalizePlaybackSnapshot(
     positionMs: snapshot?.positionMs ?? 0,
     durationMs: snapshot?.durationMs ?? 0,
     lyricsWindowVisible: snapshot?.lyricsWindowVisible ?? false,
+    desktopLyricsLocked: snapshot?.desktopLyricsLocked ?? false,
   };
 }
 

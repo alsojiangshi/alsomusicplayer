@@ -8,6 +8,8 @@
     "build": "pnpm --dir packages/gui build",
     "build:gui": "pnpm --dir packages/gui build",
     "build:tauri": "pnpm --dir packages/gui tauri:build",
+    "build:tauri:local": "pnpm --dir packages/gui tauri build --no-bundle",
+    "package:portable:local": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1",
     "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/gui/tsconfig.json --noEmit",
     "test:core": "node --test --experimental-strip-types packages/core/test/*.test.ts",
     "test:rust": "cargo test --manifest-path packages/gui/src-tauri/Cargo.toml",

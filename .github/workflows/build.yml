@@ -8,18 +8,22 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
       - run: node .github/scripts/release-meta.mjs validate
       - name: Install Linux system libraries
         run: |
@@ -27,20 +31,24 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev patchelf
-      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test:core
+      - run: cargo fmt --manifest-path packages/gui/src-tauri/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path packages/gui/src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: cargo test --manifest-path packages/gui/src-tauri/Cargo.toml
 
   build-linux:
     runs-on: ubuntu-22.04
     needs: validate
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
       - run: node .github/scripts/release-meta.mjs validate
       - name: Install Linux system libraries
@@ -49,11 +57,8 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
             libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev \
             libjavascriptcoregtk-4.1-dev patchelf
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm build
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm install --frozen-lockfile
+      - uses: tauri-apps/tauri-action@v1
         with:
           projectPath: packages/gui
           args: --target x86_64-unknown-linux-gnu
@@ -64,27 +69,27 @@ jobs:
           PRODUCT="$(node .github/scripts/release-meta.mjs product-name)"
           APPIMAGE="$(find packages/gui/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage -name '*.AppImage' | head -n 1)"
           cp "$APPIMAGE" "dist/linux/${PRODUCT}-gui-${VERSION}-linux-x64-appimage.AppImage"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gui-linux
           path: dist/linux
+          if-no-files-found: error
 
   build-windows:
     runs-on: windows-latest
     needs: validate
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
       - uses: dtolnay/rust-toolchain@stable
       - run: node .github/scripts/release-meta.mjs validate
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm build
-      - uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm install --frozen-lockfile
+      - uses: tauri-apps/tauri-action@v1
         with:
           projectPath: packages/gui
           args: --target x86_64-pc-windows-msvc
@@ -101,7 +106,11 @@ jobs:
           $portableDir = Join-Path $PWD 'dist/windows/portable'
           $portableZip = Join-Path $PWD "dist/windows/$portableName"
           New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $portableDir 'data') | Out-Null
           Copy-Item -LiteralPath (Join-Path $releaseDir 'also-music-player.exe') -Destination (Join-Path $portableDir "$productName.exe") -Force
+          Set-Content -LiteralPath (Join-Path $portableDir 'portable.json') -Value (@{
+            dataDir = 'data'
+          } | ConvertTo-Json) -Encoding utf8
           foreach ($pattern in @('*.dll', '*.pak', '*.dat', '*.bin', '*.json')) {
             Get-ChildItem -Path $releaseDir -File -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
               Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $portableDir $_.Name) -Force
@@ -115,10 +124,14 @@ jobs:
           }
           if (Test-Path $portableZip) { Remove-Item -LiteralPath $portableZip -Force }
           Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $portableZip -CompressionLevel Optimal
-      - uses: actions/upload-artifact@v4
+          Remove-Item -LiteralPath $portableDir -Recurse -Force
+      - uses: actions/upload-artifact@v7
         with:
           name: gui-windows
-          path: dist/windows
+          path: |
+            dist/windows/*.exe
+            dist/windows/*.zip
+          if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -129,9 +142,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
-          files: release/**/*
+          files: |
+            release/gui-linux/*.AppImage
+            release/gui-windows/*.exe
+            release/gui-windows/*.zip
+          fail_on_unmatched_files: true

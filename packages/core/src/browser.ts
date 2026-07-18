@@ -1,15 +1,18 @@
 export { PlaybackMode, PlaybackState } from './types.ts';
 export type {
   DesktopLyricsSnapshot,
+  AutoLyricsScope,
   LibraryBootstrap,
   LibraryRoot,
   LyricsData,
+  OnlineSourceSetting,
   PlaybackSnapshot,
   Playlist,
   QueueEntry,
   ResolvedUiLanguage,
   ResolverSearchResult,
   SourceKind,
+  StartupDiagnostics,
   Track,
   TrackAvailability,
   TrackOverrideInput,

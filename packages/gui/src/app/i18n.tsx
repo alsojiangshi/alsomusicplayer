@@ -55,6 +55,11 @@ export interface I18nStrings {
     refreshComplete: (added: number, updated: number) => string;
     removedTrack: string;
     shortcutSettingsSaved: string;
+    onlineSettingsSaved: string;
+    autoLyricsNoSources: string;
+    autoLyricsProgress: (current: number, total: number, title: string) => string;
+    autoLyricsComplete: (found: number) => string;
+    autoLyricsCompleteWithErrors: (found: number, failures: number) => string;
     trackOverridesSaved: string;
     trackAddedToPlaylist: string;
     importedFolders: (added: number, updated: number) => string;
@@ -83,11 +88,29 @@ export interface I18nStrings {
   };
   queue: {
     empty: string;
+    sourceLabel: string;
+    librarySource: string;
+    playlistSource: string;
+    selectPlaylist: string;
+    loadSource: string;
+    loadingSource: string;
+    sourceLoaded: (count: number) => string;
+    moveUp: string;
+    moveDown: string;
+    remove: string;
   };
   lyrics: {
     emptyTrack: string;
     searchOnline: string;
     emptyLyrics: string;
+    unsyncedHint: string;
+    fileLabel: string;
+    revealFile: string;
+    searchingAction: string;
+    searching: string;
+    searchSuccess: string;
+    searchNotFound: string;
+    searchFailed: (message: string) => string;
   };
   settings: {
     languageTitle: string;
@@ -113,7 +136,40 @@ export interface I18nStrings {
     nextTrack: string;
     previousTrack: string;
     toggleDesktopLyrics: string;
+    toggleDesktopLyricsLock: string;
     saveShortcuts: string;
+    shortcutCaptureHint: string;
+    shortcutListening: string;
+    shortcutUnbound: string;
+    shortcutReset: string;
+    shortcutConflict: string;
+    shortcutConfigPath: string;
+    revealShortcutConfig: string;
+    settingsConfigPath: string;
+    revealSettingsConfig: string;
+    onlineTitle: string;
+    onlineDescription: string;
+    saveOnlineSettings: string;
+    autoLyricsScope: string;
+    autoLyricsOff: string;
+    autoLyricsPlaying: string;
+    autoLyricsLibrary: string;
+    autoLyricsPlaylists: string;
+    selectAutoLyricsPlaylists: string;
+    onlineSources: string;
+    onlineSourcesHint: string;
+    addSource: string;
+    newSource: string;
+    sourceName: string;
+    resourceType: string;
+    resourceLyrics: string;
+    resourceMusic: string;
+    providerType: string;
+    sourceBaseUrl: string;
+    sourcePriority: string;
+    sourceEnabled: string;
+    removeSource: string;
+    noSourcesForType: string;
   };
   player: {
     nothingPlaying: string;
@@ -121,6 +177,8 @@ export interface I18nStrings {
     playbackMode: string;
     openLyrics: string;
     desktopLyrics: string;
+    lockDesktopLyrics: string;
+    unlockDesktopLyrics: string;
     volumeMode: (volume: number, mode: string) => string;
   };
   table: {
@@ -175,6 +233,7 @@ export interface I18nStrings {
     defaultArtist: string;
     defaultCurrentLine: string;
     defaultNextLine: string;
+    lock: string;
   };
   sourceKindLabel: (value: SourceKind) => string;
   availabilityLabel: (value: TrackAvailability) => string;
@@ -183,7 +242,7 @@ export interface I18nStrings {
   languageOptionLabel: (value: UiLanguagePreference, currentResolved: ResolvedUiLanguage) => string;
 }
 
-const I18nContext = createContext<I18nStrings>(buildStrings('en-US'));
+const I18nContext = createContext<I18nStrings | null>(null);
 
 export function I18nProvider(props: { value: I18nStrings; children: ReactNode }) {
   return (
@@ -194,7 +253,7 @@ export function I18nProvider(props: { value: I18nStrings; children: ReactNode })
 }
 
 export function useI18n() {
-  return useContext(I18nContext);
+  return useContext(I18nContext) ?? enUS;
 }
 
 export function buildStrings(language: ResolvedUiLanguage): I18nStrings {
@@ -249,7 +308,7 @@ const enUS: I18nStrings = {
         case 'playlists':
           return `${playlistCount} playlists ready for curated listening.`;
         case 'queue':
-          return 'Review and jump through the current playback queue.';
+          return 'Choose a source, reorder tracks, remove items, and control what plays next.';
         case 'lyrics':
           return 'Follow synced lyrics, or search online when local files do not have them.';
         case 'settings':
@@ -270,6 +329,11 @@ const enUS: I18nStrings = {
     refreshComplete: (added, updated) => `Refresh complete. Added ${added}, updated ${updated}.`,
     removedTrack: 'Removed track from library.',
     shortcutSettingsSaved: 'Shortcut settings saved.',
+    onlineSettingsSaved: 'Online search and automatic lyrics settings saved.',
+    autoLyricsNoSources: 'Automatic lyrics search is enabled, but no lyrics source is enabled.',
+    autoLyricsProgress: (current, total, title) => `Automatic lyrics ${current}/${total}: ${title}`,
+    autoLyricsComplete: found => `Automatic lyrics search finished. Added ${found} lyrics files.`,
+    autoLyricsCompleteWithErrors: (found, failures) => `Automatic lyrics search added ${found} files; ${failures} tracks failed.`,
     trackOverridesSaved: 'Track overrides saved.',
     trackAddedToPlaylist: 'Track added to playlist.',
     importedFolders: (added, updated) => `Imported folders. Added ${added}, updated ${updated}.`,
@@ -298,11 +362,29 @@ const enUS: I18nStrings = {
   },
   queue: {
     empty: 'Queue is empty. Double-click a track in the library to start playback.',
+    sourceLabel: 'Queue source',
+    librarySource: 'Media Library',
+    playlistSource: 'Playlist',
+    selectPlaylist: 'Select a playlist',
+    loadSource: 'Load Queue',
+    loadingSource: 'Loading…',
+    sourceLoaded: count => `Loaded ${count} tracks into the playback queue.`,
+    moveUp: 'Move up',
+    moveDown: 'Move down',
+    remove: 'Remove from queue',
   },
   lyrics: {
     emptyTrack: 'Start playing a track to load synced lyrics and desktop lyric state.',
     searchOnline: 'Search Online',
     emptyLyrics: 'No lyrics available yet. Try the online search or add custom lyrics in the editor.',
+    unsyncedHint: 'This result has no synchronized timeline, so it is shown as plain lyrics.',
+    fileLabel: 'Active lyrics file',
+    revealFile: 'Reveal Lyrics File',
+    searchingAction: 'Searching...',
+    searching: 'Searching the online lyrics service and matching this track...',
+    searchSuccess: 'Lyrics found, matched, and saved to the local lyrics file.',
+    searchNotFound: 'No matching lyrics were found. Check the title and artist, then try again.',
+    searchFailed: message => `Online lyrics search failed: ${message}`,
   },
   settings: {
     languageTitle: 'Interface Language',
@@ -323,12 +405,45 @@ const enUS: I18nStrings = {
     desktopLyricsAvailable: 'Desktop lyrics window is available on this platform.',
     desktopLyricsUnavailable: 'Desktop lyrics window is not available on this platform build.',
     shortcutsTitle: 'Shortcut Preferences',
-    shortcutsDescription: 'Local keyboard mappings are configurable today. Global registration is scaffolded but host-level activation is still conservative.',
+    shortcutsDescription: 'Shortcuts work whenever an AlsoMusicPlayer window is focused, except while typing text.',
     togglePlayPause: 'Toggle Play / Pause',
     nextTrack: 'Next Track',
     previousTrack: 'Previous Track',
     toggleDesktopLyrics: 'Toggle Desktop Lyrics',
+    toggleDesktopLyricsLock: 'Toggle Desktop Lyrics Lock',
     saveShortcuts: 'Save Shortcut Preferences',
+    shortcutCaptureHint: 'Click a binding, then press the desired key combination. Escape cancels; Backspace or Delete clears it. Changes apply immediately.',
+    shortcutListening: 'Press a key…',
+    shortcutUnbound: 'Unbound',
+    shortcutReset: 'Reset',
+    shortcutConflict: 'Conflicts with another action',
+    shortcutConfigPath: 'Editable shortcut config',
+    revealShortcutConfig: 'Reveal Config',
+    settingsConfigPath: 'Editable player settings config',
+    revealSettingsConfig: 'Reveal Settings Config',
+    onlineTitle: 'Online Search and Automatic Lyrics',
+    onlineDescription: 'Automatic lyrics are off by default. Enabled sources are tried in ascending priority order.',
+    saveOnlineSettings: 'Save Online Settings',
+    autoLyricsScope: 'Automatic online lyrics search',
+    autoLyricsOff: 'Off (default)',
+    autoLyricsPlaying: 'Currently playing track',
+    autoLyricsLibrary: 'Entire media library',
+    autoLyricsPlaylists: 'Selected playlists',
+    selectAutoLyricsPlaylists: 'Select playlists whose tracks may be searched automatically.',
+    onlineSources: 'Online Sources',
+    onlineSourcesHint: 'Configure lyrics and music-search sources. LRCLIB-compatible and NetEase-compatible APIs are supported.',
+    addSource: 'Add Source',
+    newSource: 'New Source',
+    sourceName: 'Source name',
+    resourceType: 'Resource type',
+    resourceLyrics: 'Lyrics',
+    resourceMusic: 'Music search/playback',
+    providerType: 'API protocol',
+    sourceBaseUrl: 'Base URL',
+    sourcePriority: 'Priority',
+    sourceEnabled: 'Enabled',
+    removeSource: 'Remove source',
+    noSourcesForType: 'No sources of this type yet. Add one to begin.',
   },
   player: {
     nothingPlaying: 'Nothing playing',
@@ -336,6 +451,8 @@ const enUS: I18nStrings = {
     playbackMode: 'Playback mode',
     openLyrics: 'Lyrics',
     desktopLyrics: 'Desktop Lyrics',
+    lockDesktopLyrics: 'Lock desktop lyrics and enable mouse click-through',
+    unlockDesktopLyrics: 'Unlock desktop lyrics and restore interaction',
     volumeMode: (volume, mode) => `Volume ${volume}% · Mode ${mode}`,
   },
   table: {
@@ -390,6 +507,7 @@ const enUS: I18nStrings = {
     defaultArtist: 'Desktop Lyrics',
     defaultCurrentLine: 'Play a track to start desktop lyrics.',
     defaultNextLine: 'You can control playback from this floating window.',
+    lock: 'Lock desktop lyrics',
   },
   sourceKindLabel: value => ({
     local_file: 'Local File',
@@ -465,7 +583,7 @@ const zhCN: I18nStrings = {
         case 'playlists':
           return `当前共有 ${playlistCount} 个歌单。`;
         case 'queue':
-          return '查看当前播放队列，并在其中快速跳转。';
+          return '选择队列来源、调整曲目顺序、移除项目，并控制接下来播放什么。';
         case 'lyrics':
           return '跟随同步歌词；如果本地没有歌词，也可以在线搜索。';
         case 'settings':
@@ -486,6 +604,11 @@ const zhCN: I18nStrings = {
     refreshComplete: (added, updated) => `刷新完成。新增 ${added} 首，更新 ${updated} 首。`,
     removedTrack: '已从媒体库移除曲目。',
     shortcutSettingsSaved: '快捷键设置已保存。',
+    onlineSettingsSaved: '在线搜索源和自动歌词设置已保存。',
+    autoLyricsNoSources: '已开启自动歌词搜索，但没有启用任何歌词来源。',
+    autoLyricsProgress: (current, total, title) => `自动搜索歌词 ${current}/${total}：${title}`,
+    autoLyricsComplete: found => `自动歌词搜索完成，新增 ${found} 个歌词文件。`,
+    autoLyricsCompleteWithErrors: (found, failures) => `自动歌词搜索新增 ${found} 个文件，${failures} 首歌曲搜索失败。`,
     trackOverridesSaved: '曲目信息覆盖已保存。',
     trackAddedToPlaylist: '已将曲目加入歌单。',
     importedFolders: (added, updated) => `已导入文件夹。新增 ${added} 首，更新 ${updated} 首。`,
@@ -514,11 +637,29 @@ const zhCN: I18nStrings = {
   },
   queue: {
     empty: '播放队列为空。双击媒体库中的曲目即可开始播放。',
+    sourceLabel: '队列来源',
+    librarySource: '媒体库',
+    playlistSource: '歌单',
+    selectPlaylist: '选择一个歌单',
+    loadSource: '载入队列',
+    loadingSource: '正在载入…',
+    sourceLoaded: count => `已将 ${count} 首曲目载入播放队列。`,
+    moveUp: '上移',
+    moveDown: '下移',
+    remove: '从队列移除',
   },
   lyrics: {
     emptyTrack: '先播放一首曲目，才能加载同步歌词和桌面歌词状态。',
     searchOnline: '在线搜索',
     emptyLyrics: '暂时还没有歌词。可以尝试在线搜索，或在编辑器里手动添加。',
+    unsyncedHint: '当前结果不含同步时间轴，已按纯文本歌词显示。',
+    fileLabel: '当前实际使用的歌词文件',
+    revealFile: '打开歌词文件位置',
+    searchingAction: '正在搜索…',
+    searching: '正在连接在线歌词服务，并根据歌曲信息匹配歌词…',
+    searchSuccess: '已找到匹配歌词，并保存到本地歌词文件。',
+    searchNotFound: '没有找到匹配歌词，请检查歌曲名和艺术家后重试。',
+    searchFailed: message => `在线歌词搜索失败：${message}`,
   },
   settings: {
     languageTitle: '界面语言',
@@ -539,12 +680,45 @@ const zhCN: I18nStrings = {
     desktopLyricsAvailable: '当前平台支持桌面歌词窗口。',
     desktopLyricsUnavailable: '当前平台构建不支持桌面歌词窗口。',
     shortcutsTitle: '快捷键设置',
-    shortcutsDescription: '当前先支持本地键位映射。全局快捷键保留了宿主层接口，但默认仍偏保守。',
+    shortcutsDescription: '只要 AlsoMusicPlayer 窗口处于焦点中快捷键就会生效；输入文字时自动停用。',
     togglePlayPause: '播放 / 暂停',
     nextTrack: '下一首',
     previousTrack: '上一首',
     toggleDesktopLyrics: '切换桌面歌词',
+    toggleDesktopLyricsLock: '切换桌面歌词锁定',
     saveShortcuts: '保存快捷键设置',
+    shortcutCaptureHint: '点击一个键位后按下新的组合键。Esc 取消，Backspace 或 Delete 清除；修改后立即生效。',
+    shortcutListening: '请按下按键…',
+    shortcutUnbound: '未绑定',
+    shortcutReset: '重置',
+    shortcutConflict: '与另一个操作的按键冲突',
+    shortcutConfigPath: '可编辑快捷键配置文件',
+    revealShortcutConfig: '打开配置位置',
+    settingsConfigPath: '可编辑播放器设置配置文件',
+    revealSettingsConfig: '打开设置配置位置',
+    onlineTitle: '在线搜索与自动歌词',
+    onlineDescription: '自动在线搜索歌词默认关闭；启用的来源会按优先级数字从小到大依次尝试。',
+    saveOnlineSettings: '保存在线设置',
+    autoLyricsScope: '自动在线搜索歌词',
+    autoLyricsOff: '关闭（默认）',
+    autoLyricsPlaying: '正在播放的音乐',
+    autoLyricsLibrary: '整个媒体库',
+    autoLyricsPlaylists: '特定歌单',
+    selectAutoLyricsPlaylists: '选择允许自动搜索歌词的歌单。',
+    onlineSources: '在线来源',
+    onlineSourcesHint: '歌词和音乐搜索共用来源管理；当前支持 LRCLIB 兼容接口和网易云兼容接口。',
+    addSource: '添加来源',
+    newSource: '新来源',
+    sourceName: '来源名称',
+    resourceType: '资源类型',
+    resourceLyrics: '歌词',
+    resourceMusic: '音乐搜索/播放',
+    providerType: '接口协议',
+    sourceBaseUrl: '基础地址',
+    sourcePriority: '优先级',
+    sourceEnabled: '启用',
+    removeSource: '删除来源',
+    noSourcesForType: '此类型还没有来源，点击添加来源开始配置。',
   },
   player: {
     nothingPlaying: '当前没有正在播放的音乐',
@@ -552,6 +726,8 @@ const zhCN: I18nStrings = {
     playbackMode: '播放模式',
     openLyrics: '歌词',
     desktopLyrics: '桌词',
+    lockDesktopLyrics: '锁定桌面歌词并启用鼠标穿透',
+    unlockDesktopLyrics: '解锁桌面歌词并恢复交互',
     volumeMode: (volume, mode) => `音量 ${volume}% · 模式 ${mode}`,
   },
   table: {
@@ -606,6 +782,7 @@ const zhCN: I18nStrings = {
     defaultArtist: '桌面歌词',
     defaultCurrentLine: '播放一首歌后，这里会开始显示桌面歌词。',
     defaultNextLine: '你也可以在这个浮窗里直接控制播放。',
+    lock: '锁定桌面歌词',
   },
   sourceKindLabel: value => ({
     local_file: '本地文件',

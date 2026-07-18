@@ -26,6 +26,7 @@ export interface ShortcutSettings {
   nextTrack: string;
   previousTrack: string;
   toggleDesktopLyrics: string;
+  toggleDesktopLyricsLock: string;
 }
 
 export interface ShortcutCapabilities {
@@ -44,6 +45,7 @@ export interface DirectUrlInput {
 
 export interface ResolverTrackInput {
   id: string;
+  resolverId: string;
   title: string;
   artist: string;
   album: string;
@@ -60,7 +62,8 @@ export type TransportAction =
   | 'toggle'
   | 'next'
   | 'previous'
-  | 'toggle-desktop-lyrics';
+  | 'toggle-desktop-lyrics'
+  | 'toggle-desktop-lyrics-lock';
 
 export const commands = {
   bootstrap: () => invoke<LibraryBootstrap>('library_bootstrap'),
@@ -95,20 +98,32 @@ export const commands = {
   getLyrics: (trackId: number) => invoke<LyricsData | null>('lyrics_get', { trackId }),
   searchLyricsOnline: (trackId: number) =>
     invoke<LyricsData | null>('lyrics_search_online', { trackId }),
+  lyricsFilePath: (trackId: number) =>
+    invoke<string | null>('lyrics_file_path', { trackId }),
+  revealLyricsFile: (trackId: number) =>
+    invoke<void>('lyrics_reveal_file', { trackId }),
   loadSession: () => invoke<PlaybackSnapshot>('session_load'),
   saveSession: (snapshot: PlaybackSnapshot) => invoke<void>('session_save', { snapshot }),
   broadcastPlayback: (snapshot: PlaybackSnapshot) =>
     invoke<void>('playback_broadcast', { snapshot }),
   toggleDesktopLyrics: () => invoke<boolean>('desktop_lyrics_toggle'),
+  toggleDesktopLyricsLock: () => invoke<boolean>('desktop_lyrics_lock_toggle'),
+  getDesktopLyricsLocked: () => invoke<boolean>('desktop_lyrics_lock_get'),
   setDesktopLyricsVisible: (visible: boolean) =>
     invoke<void>('desktop_lyrics_set_visible', { visible }),
   pushDesktopLyrics: (snapshot: DesktopLyricsSnapshot) =>
     invoke<void>('desktop_lyrics_push', { snapshot }),
+  getDesktopLyrics: () => invoke<DesktopLyricsSnapshot>('desktop_lyrics_get'),
   transport: (action: TransportAction) => invoke<void>('player_transport', { action }),
   loadShortcuts: () => invoke<ShortcutSettings>('shortcuts_load'),
   saveShortcuts: (settings: ShortcutSettings) =>
     invoke<ShortcutCapabilities>('shortcuts_save', { settings }),
+  shortcutConfigPath: () => invoke<string>('shortcuts_config_path'),
+  revealShortcutConfig: () => invoke<void>('shortcuts_reveal_config'),
   saveSettings: (settings: UiSettings) => invoke<UiSettings>('settings_save', { settings }),
+  loadSettings: () => invoke<UiSettings>('settings_load'),
+  settingsConfigPath: () => invoke<string>('settings_config_path'),
+  revealSettingsConfig: () => invoke<void>('settings_reveal_config'),
 };
 
 export function toWebAssetSource(locator: string): string {
@@ -123,6 +138,10 @@ export function getPlayableSource(locator: string): string {
 }
 
 export function currentWindowLabel(): string {
+  const explicitLabel = new URLSearchParams(window.location.search).get('window');
+  if (explicitLabel) {
+    return explicitLabel;
+  }
   try {
     return getCurrentWindow().label;
   } catch {

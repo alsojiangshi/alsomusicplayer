@@ -6,9 +6,26 @@ export type UiLanguagePreference = 'system' | 'en-US' | 'zh-CN';
 
 export type ResolvedUiLanguage = 'en-US' | 'zh-CN';
 
+export type AutoLyricsScope = 'off' | 'playing' | 'library' | 'playlists';
+export type OnlineResourceType = 'lyrics' | 'music';
+export type OnlineProviderType = 'lrclib' | 'netease';
+
+export interface OnlineSourceSetting {
+  id: string;
+  label: string;
+  resourceType: OnlineResourceType;
+  providerType: OnlineProviderType;
+  baseUrl: string;
+  enabled: boolean;
+  priority: number;
+}
+
 export interface UiSettings {
   languagePreference: UiLanguagePreference;
   resolvedLanguage: ResolvedUiLanguage;
+  autoLyricsScope: AutoLyricsScope;
+  autoLyricsPlaylistIds: number[];
+  onlineSources: OnlineSourceSetting[];
 }
 
 export const PlaybackState = {
@@ -90,6 +107,7 @@ export interface PlaybackSnapshot {
   positionMs: number;
   durationMs: number;
   lyricsWindowVisible: boolean;
+  desktopLyricsLocked: boolean;
 }
 
 export interface DesktopLyricsSnapshot {
@@ -98,6 +116,16 @@ export interface DesktopLyricsSnapshot {
   currentLine: string;
   nextLine: string;
   isPlaying: boolean;
+}
+
+export interface StartupDiagnostics {
+  storageMode: 'system' | 'portable';
+  appDataDir: string;
+  databasePath: string;
+  portableRoot: string | null;
+  portableMarkerPath: string | null;
+  recoveredSessionKeys: string[];
+  warnings: string[];
 }
 
 export interface TrackOverrideInput {
@@ -135,6 +163,7 @@ export interface LibraryBootstrap {
   session: PlaybackSnapshot;
   desktopLyricsSupported: boolean;
   uiSettings: UiSettings;
+  startup: StartupDiagnostics;
 }
 
 export interface TrackDraft {

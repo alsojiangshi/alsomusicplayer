@@ -60,6 +60,7 @@ pub struct PlaybackSnapshot {
     pub position_ms: i64,
     pub duration_ms: i64,
     pub lyrics_window_visible: bool,
+    pub desktop_lyrics_locked: bool,
 }
 
 impl Default for PlaybackSnapshot {
@@ -75,15 +76,45 @@ impl Default for PlaybackSnapshot {
             position_ms: 0,
             duration_ms: 0,
             lyrics_window_visible: false,
+            desktop_lyrics_locked: false,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct UiSettings {
     pub language_preference: String,
     pub resolved_language: String,
+    pub auto_lyrics_scope: String,
+    pub auto_lyrics_playlist_ids: Vec<i64>,
+    pub online_sources: Vec<OnlineSourceSetting>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct OnlineSourceSetting {
+    pub id: String,
+    pub label: String,
+    pub resource_type: String,
+    pub provider_type: String,
+    pub base_url: String,
+    pub enabled: bool,
+    pub priority: i64,
+}
+
+impl Default for OnlineSourceSetting {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            label: String::new(),
+            resource_type: "lyrics".to_string(),
+            provider_type: "lrclib".to_string(),
+            base_url: String::new(),
+            enabled: true,
+            priority: 100,
+        }
+    }
 }
 
 impl Default for UiSettings {
@@ -91,6 +122,37 @@ impl Default for UiSettings {
         Self {
             language_preference: "system".to_string(),
             resolved_language: "en-US".to_string(),
+            auto_lyrics_scope: "off".to_string(),
+            auto_lyrics_playlist_ids: Vec::new(),
+            online_sources: vec![
+                OnlineSourceSetting {
+                    id: "lrclib-default".to_string(),
+                    label: "LRCLIB".to_string(),
+                    resource_type: "lyrics".to_string(),
+                    provider_type: "lrclib".to_string(),
+                    base_url: "https://lrclib.net/api".to_string(),
+                    enabled: true,
+                    priority: 10,
+                },
+                OnlineSourceSetting {
+                    id: "netease-lyrics-default".to_string(),
+                    label: "NetEase Lyrics".to_string(),
+                    resource_type: "lyrics".to_string(),
+                    provider_type: "netease".to_string(),
+                    base_url: "https://music.163.com".to_string(),
+                    enabled: false,
+                    priority: 20,
+                },
+                OnlineSourceSetting {
+                    id: "netease-music-default".to_string(),
+                    label: "NetEase Music".to_string(),
+                    resource_type: "music".to_string(),
+                    provider_type: "netease".to_string(),
+                    base_url: "https://music.163.com".to_string(),
+                    enabled: true,
+                    priority: 10,
+                },
+            ],
         }
     }
 }
@@ -114,6 +176,19 @@ pub struct LibraryBootstrap {
     pub session: PlaybackSnapshot,
     pub desktop_lyrics_supported: bool,
     pub ui_settings: UiSettings,
+    pub startup: StartupDiagnostics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupDiagnostics {
+    pub storage_mode: String,
+    pub app_data_dir: String,
+    pub database_path: String,
+    pub portable_root: Option<String>,
+    pub portable_marker_path: Option<String>,
+    pub recovered_session_keys: Vec<String>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -269,18 +344,48 @@ impl AppDatabase {
             .map_err(|err| err.to_string())
     }
 
-    pub fn bootstrap(&self, desktop_lyrics_supported: bool) -> Result<LibraryBootstrap, String> {
+    pub fn bootstrap(
+        &self,
+        desktop_lyrics_supported: bool,
+        initial_startup: &StartupDiagnostics,
+    ) -> Result<LibraryBootstrap, String> {
+        let playback_session =
+            self.load_session_resilient::<PlaybackSnapshot>("playback_session")?;
+        let ui_settings = self.load_session_resilient::<UiSettings>("ui_settings")?;
+        let mut startup = initial_startup.clone();
+
+        if playback_session.recovered {
+            startup
+                .recovered_session_keys
+                .push("playback_session".to_string());
+        }
+        if ui_settings.recovered {
+            startup
+                .recovered_session_keys
+                .push("ui_settings".to_string());
+        }
+
+        startup.recovered_session_keys.sort();
+        startup.recovered_session_keys.dedup();
+        let recovery_warnings = startup
+            .recovered_session_keys
+            .iter()
+            .map(|key| format!("Reset invalid startup session data for {key}."))
+            .collect::<Vec<_>>();
+        for warning in recovery_warnings {
+            if !startup.warnings.contains(&warning) {
+                startup.warnings.push(warning);
+            }
+        }
+
         Ok(LibraryBootstrap {
             tracks: self.list_tracks()?,
             playlists: self.list_playlists()?,
             roots: self.list_roots()?,
-            session: self
-                .load_session::<PlaybackSnapshot>("playback_session")?
-                .unwrap_or_default(),
+            session: playback_session.value.unwrap_or_default(),
             desktop_lyrics_supported,
-            ui_settings: self
-                .load_session::<UiSettings>("ui_settings")?
-                .unwrap_or_default(),
+            ui_settings: ui_settings.value.unwrap_or_default(),
+            startup,
         })
     }
 
@@ -595,6 +700,16 @@ impl AppDatabase {
         Ok(())
     }
 
+    pub fn update_track_fingerprint(&self, track_id: i64, fingerprint: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE tracks SET fingerprint = ?, updated_at = ? WHERE id = ?",
+                params![fingerprint, now_iso(), track_id],
+            )
+            .map_err(|err| err.to_string())?;
+        Ok(())
+    }
+
     pub fn create_playlist(&self, name: &str) -> Result<Playlist, String> {
         let now = now_iso();
         self.conn
@@ -848,7 +963,10 @@ impl AppDatabase {
         Ok(())
     }
 
-    pub fn load_session<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, String> {
+    pub fn load_session_resilient<T: DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> Result<SessionLoadResult<T>, String> {
         let raw = self
             .conn
             .query_row("SELECT value FROM sessions WHERE key = ?", [key], |row| {
@@ -858,10 +976,24 @@ impl AppDatabase {
             .map_err(|err| err.to_string())?;
 
         match raw {
-            Some(payload) => serde_json::from_str::<T>(&payload)
-                .map(Some)
-                .map_err(|err| err.to_string()),
-            None => Ok(None),
+            Some(payload) => match serde_json::from_str::<T>(&payload) {
+                Ok(value) => Ok(SessionLoadResult {
+                    value: Some(value),
+                    recovered: false,
+                }),
+                Err(err) => {
+                    eprintln!("reset invalid session '{key}': {err}");
+                    self.delete_session(key)?;
+                    Ok(SessionLoadResult {
+                        value: None,
+                        recovered: true,
+                    })
+                }
+            },
+            None => Ok(SessionLoadResult {
+                value: None,
+                recovered: false,
+            }),
         }
     }
 
@@ -897,6 +1029,18 @@ impl AppDatabase {
             )
             .map_err(|err| err.to_string())
     }
+
+    fn delete_session(&self, key: &str) -> Result<(), String> {
+        self.conn
+            .execute("DELETE FROM sessions WHERE key = ?", [key])
+            .map_err(|err| err.to_string())?;
+        Ok(())
+    }
+}
+
+pub struct SessionLoadResult<T> {
+    pub value: Option<T>,
+    pub recovered: bool,
 }
 
 fn map_track(row: &Row<'_>) -> rusqlite::Result<Track> {
@@ -937,4 +1081,108 @@ fn null_if_empty(value: Option<String>) -> Option<String> {
             Some(trimmed)
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        env,
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_database_path() -> PathBuf {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before unix epoch")
+            .as_nanos();
+        let sequence = COUNTER.fetch_add(1, Ordering::Relaxed);
+        env::temp_dir().join(format!(
+            "also-music-player-test-{timestamp}-{sequence}.sqlite3"
+        ))
+    }
+
+    #[test]
+    fn load_session_resilient_resets_invalid_payloads() {
+        let path = temp_database_path();
+        let db = AppDatabase::open(&path).expect("open temporary database");
+
+        db.conn
+            .execute(
+                "INSERT INTO sessions (key, value, updated_at) VALUES (?, ?, ?)",
+                params!["playback_session", "{invalid", now_iso()],
+            )
+            .expect("insert invalid session");
+
+        let result = db
+            .load_session_resilient::<PlaybackSnapshot>("playback_session")
+            .expect("recover invalid session");
+
+        assert!(result.recovered);
+        assert!(result.value.is_none());
+
+        let remaining: Option<String> = db
+            .conn
+            .query_row(
+                "SELECT value FROM sessions WHERE key = ?",
+                ["playback_session"],
+                |row| row.get(0),
+            )
+            .optional()
+            .expect("query session after recovery");
+
+        assert!(remaining.is_none());
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn bootstrap_reports_recovered_startup_sessions() {
+        let path = temp_database_path();
+        let db = AppDatabase::open(&path).expect("open temporary database");
+
+        db.conn
+            .execute(
+                "INSERT INTO sessions (key, value, updated_at) VALUES (?, ?, ?)",
+                params!["ui_settings", "{\"broken\":", now_iso()],
+            )
+            .expect("insert invalid ui settings");
+
+        let bootstrap = db
+            .bootstrap(
+                true,
+                &StartupDiagnostics {
+                    storage_mode: "system".to_string(),
+                    app_data_dir: "C:/AppData/AlsoMusicPlayer".to_string(),
+                    database_path: path.to_string_lossy().to_string(),
+                    portable_root: None,
+                    portable_marker_path: None,
+                    recovered_session_keys: Vec::new(),
+                    warnings: Vec::new(),
+                },
+            )
+            .expect("bootstrap with recovery");
+
+        assert_eq!(
+            bootstrap.ui_settings.language_preference,
+            UiSettings::default().language_preference
+        );
+        assert_eq!(
+            bootstrap.ui_settings.resolved_language,
+            UiSettings::default().resolved_language
+        );
+        assert_eq!(
+            bootstrap.startup.recovered_session_keys,
+            vec!["ui_settings".to_string()]
+        );
+        assert_eq!(
+            bootstrap.startup.database_path,
+            path.to_string_lossy().to_string()
+        );
+        assert_eq!(bootstrap.startup.storage_mode, "system".to_string());
+
+        let _ = std::fs::remove_file(path);
+    }
 }

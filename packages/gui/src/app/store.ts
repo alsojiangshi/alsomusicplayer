@@ -7,12 +7,15 @@ import type {
   PlaybackSnapshot,
   PlaybackState,
   Playlist,
+  ResolvedUiLanguage,
   ResolverSearchResult,
+  StartupDiagnostics,
   Track,
   TrackOverrideInput,
   UiSettings,
 } from '@core';
-import { normalizeUiSettings } from '@core';
+import { normalizePlaybackSnapshot, normalizeUiSettings, reconcilePlaybackSnapshot } from '@core';
+import { DEFAULT_SHORTCUTS } from './shortcuts';
 import { commands, type ScanSummary, type ShortcutSettings } from './tauri';
 
 export type ViewId = 'library' | 'playlists' | 'queue' | 'lyrics' | 'settings';
@@ -28,6 +31,7 @@ export interface PlaybackViewState {
   muted: boolean;
   mode: PlaybackMode;
   lyricsWindowVisible: boolean;
+  desktopLyricsLocked: boolean;
 }
 
 interface AppStore {
@@ -42,6 +46,8 @@ interface AppStore {
   desktopLyricsSupported: boolean;
   shortcuts: ShortcutSettings | null;
   uiSettings: UiSettings;
+  startup: StartupDiagnostics | null;
+  startupError: string | null;
   statusMessage: string | null;
   statusTone: 'info' | 'error';
   scanSummary: ScanSummary | null;
@@ -74,7 +80,7 @@ interface AppStore {
   deletePlaylist: (playlistId: number) => Promise<void>;
   addTrackToPlaylist: (playlistId: number, trackId: number) => Promise<void>;
   removeTrackFromPlaylist: (playlistId: number, trackId: number) => Promise<void>;
-  loadLyrics: (trackId: number, forceOnline?: boolean) => Promise<void>;
+  loadLyrics: (trackId: number, forceOnline?: boolean) => Promise<LyricsData | null>;
   applyPlaybackPatch: (patch: Partial<PlaybackViewState>) => void;
   resetQueueFromSession: (session: PlaybackSnapshot) => void;
   saveOverride: (input: TrackOverrideInput) => Promise<Track>;
@@ -94,6 +100,7 @@ const initialPlayback: PlaybackViewState = {
   muted: false,
   mode: 'sequential' as PlaybackMode,
   lyricsWindowVisible: false,
+  desktopLyricsLocked: false,
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -108,6 +115,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   desktopLyricsSupported: false,
   shortcuts: null,
   uiSettings: normalizeUiSettings(),
+  startup: null,
+  startupError: null,
   statusMessage: null,
   statusTone: 'info',
   scanSummary: null,
@@ -122,12 +131,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
   dragImportActive: false,
 
   async bootstrap() {
-    set({ bootstrapping: true });
+    set({ bootstrapping: true, startupError: null });
     try {
       const [bootstrap, shortcuts] = await Promise.all([
         commands.bootstrap(),
-        commands.loadShortcuts(),
+        commands.loadShortcuts().catch(() => DEFAULT_SHORTCUTS),
       ]);
+      const session = reconcilePlaybackSnapshot(
+        normalizePlaybackSnapshot(bootstrap.session),
+        bootstrap.tracks.map(track => track.id),
+      );
+      const defaultQueue = session.queue.length > 0
+        ? session.queue
+        : bootstrap.tracks.map(track => track.id);
+      const restoredSession: PlaybackSnapshot = {
+        ...session,
+        queue: defaultQueue,
+        currentIndex: session.currentTrackId === null
+          ? -1
+          : defaultQueue.indexOf(session.currentTrackId),
+      };
+      const uiSettings = normalizeUiSettings(bootstrap.uiSettings);
+      const startupMessage = formatStartupRecoveryMessage(
+        bootstrap.startup,
+        uiSettings.resolvedLanguage,
+      );
       set({
         ready: true,
         bootstrapping: false,
@@ -135,26 +163,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
         playlists: bootstrap.playlists,
         roots: bootstrap.roots,
         desktopLyricsSupported: bootstrap.desktopLyricsSupported,
-        restoredSession: bootstrap.session,
+        restoredSession,
         shortcuts,
-        uiSettings: normalizeUiSettings(bootstrap.uiSettings),
+        uiSettings,
+        startup: bootstrap.startup,
+        startupError: null,
+        statusMessage: startupMessage,
+        statusTone: startupMessage ? 'info' : 'info',
         playback: {
           ...initialPlayback,
-          currentTrackId: bootstrap.session.currentTrackId,
-          queue: bootstrap.session.queue,
-          currentIndex: bootstrap.session.currentIndex,
-          audioState: bootstrap.session.currentTrackId ? ('paused' as PlaybackState) : initialPlayback.audioState,
-          volume: bootstrap.session.volume,
-          muted: bootstrap.session.muted,
-          mode: bootstrap.session.mode,
-          positionMs: bootstrap.session.positionMs,
-          durationMs: bootstrap.session.durationMs,
-          lyricsWindowVisible: bootstrap.session.lyricsWindowVisible,
+          currentTrackId: restoredSession.currentTrackId,
+          queue: restoredSession.queue,
+          currentIndex: restoredSession.currentIndex,
+          audioState: restoredSession.currentTrackId ? ('paused' as PlaybackState) : initialPlayback.audioState,
+          volume: restoredSession.volume,
+          muted: restoredSession.muted,
+          mode: restoredSession.mode,
+          positionMs: restoredSession.positionMs,
+          durationMs: restoredSession.durationMs,
+          lyricsWindowVisible: restoredSession.lyricsWindowVisible,
+          desktopLyricsLocked: restoredSession.desktopLyricsLocked,
         },
       });
     } catch (error) {
       set({
+        ready: false,
         bootstrapping: false,
+        startupError: formatError(error),
         statusMessage: formatError(error),
         statusTone: 'error',
       });
@@ -163,12 +198,28 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   async refreshBootstrap() {
     const bootstrap = await commands.bootstrap();
+    const uiSettings = normalizeUiSettings(bootstrap.uiSettings);
+    const startupMessage = formatStartupRecoveryMessage(
+      bootstrap.startup,
+      uiSettings.resolvedLanguage,
+    );
     set(state => ({
       tracks: bootstrap.tracks,
       playlists: bootstrap.playlists,
       roots: bootstrap.roots,
       desktopLyricsSupported: bootstrap.desktopLyricsSupported,
-      uiSettings: normalizeUiSettings(bootstrap.uiSettings),
+      uiSettings,
+      startup: bootstrap.startup,
+      startupError: null,
+      statusMessage: startupMessage ?? state.statusMessage,
+      statusTone: startupMessage ? 'info' : state.statusTone,
+      playback: state.playback.queue.length === 0 && state.playback.currentTrackId === null
+        ? {
+            ...state.playback,
+            queue: bootstrap.tracks.map(track => track.id),
+            currentIndex: -1,
+          }
+        : state.playback,
       playlistTracks: Object.fromEntries(
         Object.entries(state.playlistTracks).filter(([playlistId]) =>
           bootstrap.playlists.some(playlist => playlist.id === Number(playlistId)),
@@ -283,12 +334,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const data = forceOnline
       ? await commands.searchLyricsOnline(trackId)
       : await commands.getLyrics(trackId);
-    set(state => ({
-      lyricsByTrackId: {
-        ...state.lyricsByTrackId,
-        [trackId]: data,
-      },
-    }));
+    set(state => {
+      if (JSON.stringify(state.lyricsByTrackId[trackId] ?? null) === JSON.stringify(data)) {
+        return state;
+      }
+      return {
+        lyricsByTrackId: {
+          ...state.lyricsByTrackId,
+          [trackId]: data,
+        },
+      };
+    });
+    return data;
   },
 
   applyPlaybackPatch(patch) {
@@ -314,6 +371,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         positionMs: session.positionMs,
         durationMs: session.durationMs,
         lyricsWindowVisible: session.lyricsWindowVisible,
+        desktopLyricsLocked: session.desktopLyricsLocked,
       },
     }));
   },
@@ -352,4 +410,19 @@ function formatError(error: unknown): string {
     return error;
   }
   return 'Unknown error';
+}
+
+function formatStartupRecoveryMessage(
+  startup: StartupDiagnostics | null | undefined,
+  language: ResolvedUiLanguage,
+): string | null {
+  if (!startup || startup.recoveredSessionKeys.length === 0) {
+    return null;
+  }
+
+  if (language === 'zh-CN') {
+    return `已自动恢复启动数据，重置了 ${startup.recoveredSessionKeys.join('、')}。`;
+  }
+
+  return `Recovered startup data: reset ${startup.recoveredSessionKeys.join(', ')}.`;
 }

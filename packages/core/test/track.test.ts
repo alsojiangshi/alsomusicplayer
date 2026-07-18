@@ -56,6 +56,7 @@ test('normalizePlaybackSnapshot applies stable defaults', () => {
     positionMs: 0,
     durationMs: 0,
     lyricsWindowVisible: false,
+    desktopLyricsLocked: false,
   });
 });
 
@@ -76,12 +77,26 @@ test('normalizeUiSettings applies defaults and preserves explicit language', () 
   assert.deepEqual(normalizeUiSettings(null, ['zh-CN']), {
     languagePreference: 'system',
     resolvedLanguage: 'zh-CN',
+    autoLyricsScope: 'off',
+    autoLyricsPlaylistIds: [],
+    onlineSources: defaultOnlineSources(),
   });
   assert.deepEqual(normalizeUiSettings({ languagePreference: 'en-US' }, ['zh-CN']), {
     languagePreference: 'en-US',
     resolvedLanguage: 'en-US',
+    autoLyricsScope: 'off',
+    autoLyricsPlaylistIds: [],
+    onlineSources: defaultOnlineSources(),
   });
 });
+
+function defaultOnlineSources() {
+  return [
+    { id: 'lrclib-default', label: 'LRCLIB', resourceType: 'lyrics', providerType: 'lrclib', baseUrl: 'https://lrclib.net/api', enabled: true, priority: 10 },
+    { id: 'netease-lyrics-default', label: 'NetEase Lyrics', resourceType: 'lyrics', providerType: 'netease', baseUrl: 'https://music.163.com', enabled: false, priority: 20 },
+    { id: 'netease-music-default', label: 'NetEase Music', resourceType: 'music', providerType: 'netease', baseUrl: 'https://music.163.com', enabled: true, priority: 10 },
+  ];
+}
 
 test('reconcilePlaybackSnapshot stops when current track disappears', () => {
   const reconciled = reconcilePlaybackSnapshot(
@@ -111,5 +126,6 @@ test('reconcilePlaybackSnapshot stops when current track disappears', () => {
     muted: false,
     mode: PlaybackMode.Sequential,
     lyricsWindowVisible: true,
+    desktopLyricsLocked: false,
   });
 });
