@@ -1,6 +1,58 @@
+AlsoMusicPlayer License Scope and Exclusions
+
+1. MIT-licensed materials
+
+Except for the Excluded Materials described below and third-party materials
+that are accompanied by their own license terms, the software source code,
+build scripts, configuration files, test code, and their compiled forms in
+this repository (collectively, the "Software") are licensed under the MIT
+License reproduced below.
+
+The MIT License text below applies only to the Software as defined in this
+section and does not expand that definition to any excluded or non-code
+material.
+
+2. Excluded application icon and character artwork
+
+All files under `packages/gui/src-tauri/icons/`, including the source image,
+generated sizes and formats, application icons, tray icons, mobile icons, and
+any copies embedded in executables, installers, packages, or generated build
+artifacts, are expressly excluded from the MIT License.
+
+These visual assets depict or are derived from artwork of Nadeko Sengoku
+(千石撫子 / 千石抚子) from the Monogatari series. The AlsoMusicPlayer
+contributors do not claim ownership of the character, the underlying work, or
+the source artwork. All copyrights, trademarks, and other rights in those
+materials belong to their respective rightsholders.
+
+No license or permission to copy, modify, redistribute, sublicense, sell, or
+otherwise reuse the Excluded Materials is granted by the AlsoMusicPlayer
+contributors. Their presence in this repository or in a distributed build
+does not imply authorization, affiliation, sponsorship, or endorsement by any
+rightsholder. Anyone wishing to reuse or redistribute those materials must
+obtain any permission required from the applicable rightsholders. This notice
+does not itself make an otherwise unauthorized use lawful.
+
+3. Documentation and other non-code materials
+
+Project documentation, screenshots, branding, and other non-code materials
+are not covered by the MIT License unless a separate license notice expressly
+states otherwise. No additional rights in those materials are granted by this
+file.
+
+4. Other third-party and user-provided materials
+
+Third-party libraries and other materials carrying separate license or
+copyright notices remain subject to their respective terms and are not
+relicensed by this file. Music, cover art, lyrics, metadata, and other content
+imported by users or obtained from online services are not part of the
+Software licensed under the MIT License; rights in that content remain with
+their respective rightsholders. Users and distributors are responsible for
+ensuring that their use and distribution of such content is authorized.
+
 MIT License
 
-Copyright (c) 2025 MusicPlayer Contributors
+Copyright (c) 2025-2026 AlsoMusicPlayer Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

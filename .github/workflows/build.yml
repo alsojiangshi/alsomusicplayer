@@ -108,6 +108,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $portableDir | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $portableDir 'data') | Out-Null
           Copy-Item -LiteralPath (Join-Path $releaseDir 'also-music-player.exe') -Destination (Join-Path $portableDir "$productName.exe") -Force
+          Copy-Item -LiteralPath (Join-Path $PWD 'LICENSE') -Destination (Join-Path $portableDir 'LICENSE') -Force
           Set-Content -LiteralPath (Join-Path $portableDir 'portable.json') -Value (@{
             dataDir = 'data'
           } | ConvertTo-Json) -Encoding utf8

@@ -6,7 +6,7 @@
 
 AlsoMusicPlayer is a desktop music player centered on an indexed, local-first music library. Its supported delivery path is a Tauri v2 GUI for Windows and Linux: React, TypeScript, Vite, and Zustand provide the interface and playback state, while the Rust host handles native windows, filesystem access, metadata scanning, SQLite persistence, and network-backed source resolution.
 
-Local audio stays in its original location instead of being copied into application storage. The project is distributed under the [MIT License](./LICENSE).
+Local audio stays in its original location instead of being copied into application storage. The software code is distributed under the [MIT License](./LICENSE), subject to the exclusions described below.
 
 ## Features
 
@@ -129,6 +129,10 @@ AlsoMusicPlayer-gui-v<version>-linux-x64-appimage.AppImage
 ```
 
 Pull-request and manually dispatched builds use `dev-<run_number>` instead of a tag version.
+
+## License and Artwork Notice
+
+The software source code, build scripts, configuration, tests, and compiled code are licensed under the MIT License. Project documentation and other non-code materials are not covered unless separately stated. The Nadeko Sengoku application icon and every generated or embedded variant under `packages/gui/src-tauri/icons/` are expressly excluded from MIT licensing. The character, underlying Monogatari work, source artwork, names, and related rights belong to their respective rightsholders; this project is not affiliated with or endorsed by them. The project does not grant permission to reuse or redistribute those icon assets. Third-party dependencies and user-imported or online content remain subject to their own rights and license terms. See [LICENSE](./LICENSE) for the controlling scope and full notice.
 
 ## Acknowledgements
 

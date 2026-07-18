@@ -22,6 +22,7 @@ if (Test-Path $portableRoot) {
 New-Item -ItemType Directory -Force -Path $portableRoot | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $portableRoot 'data') | Out-Null
 Copy-Item -LiteralPath $sourceExe -Destination (Join-Path $portableRoot "$productName.exe") -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') -Destination (Join-Path $portableRoot 'LICENSE') -Force
 Set-Content -LiteralPath $portableMarker -Value (@{
   dataDir = 'data'
 } | ConvertTo-Json) -Encoding utf8
